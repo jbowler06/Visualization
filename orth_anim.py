@@ -1,6 +1,12 @@
-from vispy import app, gloo
-from sima import Sequence
+import sys
+import argparse
+import os.path
+
 import numpy as np
+from vispy import app, gloo
+
+from sima import Sequence
+from sima import ImagingDataset
 
 vertex = """
 attribute vec2 a_position;
@@ -26,8 +32,12 @@ void main() {
 """
 
 
+# This value was derived as the 95th percentile of testing experiment volume.
+# TODO: determine a better metric (or dynamic update) for this
+NORMING_VAL = 2194
+
 class Canvas(app.Canvas):
-    def __init__(self):
+    def __init__(self, path, channel=0):
         app.Canvas.__init__(self, position=(300, 100),
                             size=(800, 800), keys='interactive')
 
@@ -36,70 +46,69 @@ class Canvas(app.Canvas):
                                       (+0.5, -.5, 0.), (+0.5, +1,0.)]
         self.program['a_texcoord'] = [(0., 0.), (0., +1),
                                       (+1., 0.), (+1, +1)]
-        self.program['u_time'] = 0.0
 
         self.program2 = gloo.Program(vertex, fragment)
         self.program2['a_position'] = [(-1., -1., 0.), (-1., -0.55,0.),
                                       (+0.5, -1., 0.), (+0.5, -0.55,0.)]
         self.program2['a_texcoord'] = [(0., 0.), (0., +1.),
                                       (+1., 0.), (+1., +1.)]
-        self.program2['u_time'] = 0.0
 
         self.program3 = gloo.Program(vertex, fragment)
         self.program3['a_position'] = [(0.55, -0.5, 0.), (0.55, +1.,0.),
                                       (+1., -0.5, 0.), (+1., +1.,0.)]
         self.program3['a_texcoord'] = [(0., 0.), (0., +1.),
                                       (+1., 0.), (+1., +1.)]
-        self.program3['u_time'] = 0.0
        
-        path = '/Volumes/data/Nathan/2photon/rewardRemapping/nd125/02112015/day1-session-002/day1-session-002_Cycle00001_Element00001.h5'
-        #path =  '/Volumes/data/Nathan/2photon/acuteRemapping/nd118/12172014/z-series-004/z-series-004_Cycle00001_Element00001.h5'
-        seq = Sequence.create('HDF5',path,'tzyxc')
+        if os.path.splitext(path)[-1] == '.sima':
+            ds = ImagingDataset.load(path)
+            seq = ds.__iter__().next()
+        else:
+            seq = Sequence.create('HDF5',path,'tzyxc')
+
+        self.channel = channel
         self.sequence_iterator = seq.__iter__()
-        vol = self.sequence_iterator.next()
-        """
-        self.vol_iter = vol.__iter__()
-        surf = self.vol_iter.next()[:,:,0]
-        """
-        surf = np.sum(vol,axis=0)[:,:,0]
-        surf /= np.max(surf)
-        self.program['u_texture'] = surf.astype('float32')
+        vol = self.sequence_iterator.next().astype('float32')
+        vol /= NORMING_VAL
+        vol = np.clip(vol, 0, 1)
+
+        surf = np.sum(vol,axis=0)[:,:,channel]/vol.shape[0]
+        self.program['u_texture'] = surf
         
-        surf2 = np.sum(vol,axis=2)[:,:,0]
-        surf2 /= np.max(surf2)
+        surf2 = np.sum(vol,axis=1)[:,:,channel]/vol.shape[1]
         self.program2['u_texture'] = surf2.astype('float32')
 
-        surf3 = (np.sum(vol,axis=1)[:,:,0]).T
-        surf3 /= np.max(surf3)
+        surf3 = np.fliplr((np.sum(vol,axis=2)[:,:,channel]).T)/vol.shape[2]
         self.program3['u_texture'] = surf3.astype('float32')
 
-        self.timer = app.Timer(0.5, connect=self.on_timer, start=True)
+        self.timer = app.Timer(0.25, connect=self.on_timer, start=True)
+
+
+    def on_key_press(self,event):
+        if event.text == ' ':
+            if self.timer.running:
+                self.timer.stop()
+            else:
+                self.timer.start()
 
     def on_timer(self, event):
-        """
-        self.program['u_time'] = event.elapsed
-        try: 
-            surf = self.vol_iter.next()[:,:,0]
-        except:
-            self.vol_iter = self.sequence_iterator.next().__iter__()
-            surf = self.vol_iter.next()[:,:,0]
-        surf /= np.max(surf)
-        """
-        
-        vol = self.sequence_iterator.next()
+        try:
+            vol = self.sequence_iterator.next().astype('float32')
+        except StopIteration:
+            self.timer.stop()
+            return
 
-        surf = np.sum(vol,axis=0)[:,:,0]
-        surf /= np.max(surf)
-        self.program['u_texture'] = surf.astype('float32')
+        vol /= NORMING_VAL
+        vol = np.clip(vol, 0, 1)
+
+        surf = np.sum(vol,axis=0)[:,:,self.channel]/vol.shape[0]
+        self.program['u_texture'] = surf
 
 
-        surf = np.sum(vol,axis=1)[:,:,0]
-        surf /= np.max(surf)
-        self.program2['u_texture'] = surf.astype('float32')
+        surf = np.sum(vol,axis=1)[:,:,self.channel]/vol.shape[1]
+        self.program2['u_texture'] = surf
 
-        surf = (np.sum(vol,axis=2)[:,:,0]).T
-        surf /= np.max(surf)
-        self.program3['u_texture'] = surf.astype('float32')
+        surf = np.fliplr((np.sum(vol,axis=2)[:,:,self.channel]).T)/vol.shape[2]
+        self.program3['u_texture'] = surf
 
         self.update()
 
@@ -112,7 +121,18 @@ class Canvas(app.Canvas):
         self.program2.draw('triangle_strip')
         self.program3.draw('triangle_strip')
 
-if __name__ == '__main__':
-    canvas = Canvas()
+
+def main(argv):
+    argParser = argparse.ArgumentParser()
+    argParser.add_argument("path", action="store", type=str, 
+            help="path to either .sima folder or imaging sequence")
+    args = argParser.parse_args(argv)
+    path = args.path
+    #path = '/Volumes/data/Nathan/2photon/rewardRemapping/nd125/02112015/day1-session-002/day1-session-002_Cycle00001_Element00001.h5'
+    
+    canvas = Canvas(path)
     canvas.show()
     app.run()
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
