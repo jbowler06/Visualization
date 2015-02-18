@@ -74,15 +74,17 @@ class Canvas(app.Canvas):
         vol /= NORMING_VAL
         vol = np.clip(vol, 0, 1)
 
-        surf = np.sum(vol,axis=0)[:,:,channel]/vol.shape[0]
+        #surf = np.sum(vol,axis=0)[:,:,channel]/vol.shape[0]
+        surf = np.nanmean(vol,axis=0)[:,:,channel]
         self.program['u_texture'] = surf
         
-        surf2 = np.sum(vol,axis=1)[:,:,channel]/vol.shape[1]
+        #surf2 = np.sum(vol,axis=1)[:,:,channel]/vol.shape[1]
+        surf2 = np.nanmean(vol,axis=1)[:,:,channel]
         self.program2['u_texture'] = surf2
 
-        surf3 = np.fliplr((np.sum(vol,axis=2)[:,:,channel]).T)/vol.shape[2]
+        #surf3 = np.fliplr((np.sum(vol,axis=2)[:,:,channel]).T)/vol.shape[2]
+        surf3 = np.fliplr((np.nanmean(vol,axis=2)[:,:,channel]).T)
         self.program3['u_texture'] = surf3
-
         self.text = visuals.TextVisual('',font_size=14,color='r',pos=(700, 700))
         self.text.text = "{} / {}".format(self.frame_counter, self.length)
         self.steptext = visuals.TextVisual('step_size: 1',font_size=10,color='r',pos=(700, 725))
@@ -134,13 +136,16 @@ class Canvas(app.Canvas):
         vol /= NORMING_VAL
         vol = np.clip(vol, 0, 1)
 
-        surf = np.sum(vol,axis=0)[:,:,self.channel]/vol.shape[0]
+        #surf = np.sum(vol,axis=0)[:,:,self.channel]/vol.shape[0]
+        surf = np.nanmean(vol,axis=0)[:,:,self.channel]
         self.program['u_texture'] = surf
 
-        surf = np.sum(vol,axis=1)[:,:,self.channel]/vol.shape[1]
+        #surf = np.sum(vol,axis=1)[:,:,self.channel]/vol.shape[1]
+        surf = np.nanmean(vol,axis=1)[:,:,self.channel]
         self.program2['u_texture'] = surf
 
-        surf = np.fliplr((np.sum(vol,axis=2)[:,:,self.channel]).T)/vol.shape[2]
+        #surf = np.fliplr((np.sum(vol,axis=2)[:,:,self.channel]).T)/vol.shape[2]
+        surf = np.fliplr((np.nanmean(vol,axis=2)[:,:,self.channel]).T)
         self.program3['u_texture'] = surf
 
         self.text.text = "{} / {}".format(self.frame_counter, self.length)
