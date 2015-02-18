@@ -68,6 +68,8 @@ class Canvas(app.Canvas):
         self.frame_counter = start
         self.step_size = 1
         self.channel = channel
+        self.length = len(self.sequence)
+
         vol = self.sequence._get_frame(self.frame_counter).astype('float32')
         vol /= NORMING_VAL
         vol = np.clip(vol, 0, 1)
@@ -81,20 +83,22 @@ class Canvas(app.Canvas):
         surf3 = np.fliplr((np.sum(vol,axis=2)[:,:,channel]).T)/vol.shape[2]
         self.program3['u_texture'] = surf3
 
-        self.text = visuals.TextVisual(str(start),font_size=14,color='r',pos=(700, 700))
-        self.steptext = visuals.TextVisual('step_size: 1',font_size=10,color='r',pos=(695, 725))
+        self.text = visuals.TextVisual('',font_size=14,color='r',pos=(700, 700))
+        self.text.text = "{} / {}".format(self.frame_counter, self.length)
+        self.steptext = visuals.TextVisual('step_size: 1',font_size=10,color='r',pos=(700, 725))
         self.tr_sys = visuals.transforms.TransformSystem(self)
 
         self.timer = app.Timer(0.25, connect=self.on_timer, start=True)
 
 
     def on_key_press(self,event):
-        if event.text == ' ':
+        if event.text == ' ' or event.text == 'p':
             if self.timer.running:
                 self.timer.stop()
+                self.steptext.text = "paused"
             else:
                 self.timer.start()
-            self.steptext.text = "paused"
+                self.steptext.text = "step size: {}".format(self.step_size)
             self.update()
         
         if event.text == '.':
@@ -121,9 +125,9 @@ class Canvas(app.Canvas):
 
     def on_timer(self, event):
         self.frame_counter += self.step_size
-        if self.frame_counter < 0 or self.frame_counter >= len(self.sequence):
+        if self.frame_counter < 0 or self.frame_counter >= self.length:
             self.frame_counter -= self.step_size
-            self.step_text = "end"
+            self.step_text.text = "end"
             return
 
         vol = self.sequence._get_frame(self.frame_counter).astype('float32')
@@ -139,7 +143,7 @@ class Canvas(app.Canvas):
         surf = np.fliplr((np.sum(vol,axis=2)[:,:,self.channel]).T)/vol.shape[2]
         self.program3['u_texture'] = surf
 
-        self.text.text = str(self.frame_counter)
+        self.text.text = "{} / {}".format(self.frame_counter, self.length)
 
         self.update()
 
