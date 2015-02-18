@@ -3,7 +3,7 @@ import argparse
 import os.path
 
 import numpy as np
-from vispy import app, gloo
+from vispy import app, gloo, visuals
 
 from sima import Sequence
 from sima import ImagingDataset
@@ -37,7 +37,7 @@ void main() {
 NORMING_VAL = 2194
 
 class Canvas(app.Canvas):
-    def __init__(self, path, channel=0):
+    def __init__(self, path, channel=0, start=0):
         app.Canvas.__init__(self, position=(300, 100),
                             size=(800, 800), keys='interactive')
 
@@ -61,13 +61,14 @@ class Canvas(app.Canvas):
        
         if os.path.splitext(path)[-1] == '.sima':
             ds = ImagingDataset.load(path)
-            seq = ds.__iter__().next()
+            self.sequence = ds.__iter__().next()
         else:
-            seq = Sequence.create('HDF5',path,'tzyxc')
+            self.sequence = Sequence.create('HDF5',path,'tzyxc')
 
+        self.frame_counter = start
+        self.step_size = 1
         self.channel = channel
-        self.sequence_iterator = seq.__iter__()
-        vol = self.sequence_iterator.next().astype('float32')
+        vol = self.sequence._get_frame(self.frame_counter).astype('float32')
         vol /= NORMING_VAL
         vol = np.clip(vol, 0, 1)
 
@@ -75,10 +76,14 @@ class Canvas(app.Canvas):
         self.program['u_texture'] = surf
         
         surf2 = np.sum(vol,axis=1)[:,:,channel]/vol.shape[1]
-        self.program2['u_texture'] = surf2.astype('float32')
+        self.program2['u_texture'] = surf2
 
         surf3 = np.fliplr((np.sum(vol,axis=2)[:,:,channel]).T)/vol.shape[2]
-        self.program3['u_texture'] = surf3.astype('float32')
+        self.program3['u_texture'] = surf3
+
+        self.text = visuals.TextVisual(str(start),font_size=14,color='r',pos=(700, 700))
+        self.steptext = visuals.TextVisual('step_size: 1',font_size=10,color='r',pos=(695, 725))
+        self.tr_sys = visuals.transforms.TransformSystem(self)
 
         self.timer = app.Timer(0.25, connect=self.on_timer, start=True)
 
@@ -89,26 +94,52 @@ class Canvas(app.Canvas):
                 self.timer.stop()
             else:
                 self.timer.start()
+            self.steptext.text = "paused"
+            self.update()
+        
+        if event.text == '.':
+            if self.step_size == -1:
+                self.step_size *= -1
+            elif self.step_size > 0:
+                self.step_size *= 2
+            else:
+                self.step_size /= 2
+            self.steptext.text = "step size: {}".format(self.step_size)
+            self.update()
+
+        if event.text == ',':
+            if self.step_size == 1:
+                self.step_size /= -1
+            elif self.step_size > 0:
+                self.step_size /= 2
+            else:
+                self.step_size *= 2
+            self.steptext.text = "step size: {}".format(self.step_size)
+            self.update()
+
+
 
     def on_timer(self, event):
-        try:
-            vol = self.sequence_iterator.next().astype('float32')
-        except StopIteration:
-            self.timer.stop()
+        self.frame_counter += self.step_size
+        if self.frame_counter < 0 or self.frame_counter >= len(self.sequence):
+            self.frame_counter -= self.step_size
+            self.step_text = "end"
             return
 
+        vol = self.sequence._get_frame(self.frame_counter).astype('float32')
         vol /= NORMING_VAL
         vol = np.clip(vol, 0, 1)
 
         surf = np.sum(vol,axis=0)[:,:,self.channel]/vol.shape[0]
         self.program['u_texture'] = surf
 
-
         surf = np.sum(vol,axis=1)[:,:,self.channel]/vol.shape[1]
         self.program2['u_texture'] = surf
 
         surf = np.fliplr((np.sum(vol,axis=2)[:,:,self.channel]).T)/vol.shape[2]
         self.program3['u_texture'] = surf
+
+        self.text.text = str(self.frame_counter)
 
         self.update()
 
@@ -117,20 +148,24 @@ class Canvas(app.Canvas):
         gloo.set_viewport(0, 0, width, height)
 
     def on_draw(self, event):
+        gloo.clear('black')
+        gloo.set_viewport(0, 0, *self.size)
         self.program.draw('triangle_strip')
         self.program2.draw('triangle_strip')
         self.program3.draw('triangle_strip')
+        self.text.draw(self.tr_sys)
+        self.steptext.draw(self.tr_sys)
 
 
 def main(argv):
     argParser = argparse.ArgumentParser()
+    argParser.add_argument('-s', '--start_frame', action='store', type=int, default=0,
+            help='starting frame for viewing the sequence')
     argParser.add_argument("path", action="store", type=str, 
             help="path to either .sima folder or imaging sequence")
     args = argParser.parse_args(argv)
-    path = args.path
-    #path = '/Volumes/data/Nathan/2photon/rewardRemapping/nd125/02112015/day1-session-002/day1-session-002_Cycle00001_Element00001.h5'
     
-    canvas = Canvas(path)
+    canvas = Canvas(args.path, start=args.start_frame)
     canvas.show()
     app.run()
 
