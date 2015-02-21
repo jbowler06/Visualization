@@ -1,5 +1,4 @@
 from app import app
-from app.bin import dbManager
 import config
 
 from sys import path
@@ -74,6 +73,7 @@ def getFrame(frame_number):
 def getFrames():
     ds_path = request.form.get('path')
     start_frame = request.form.get('startFrame')
+    step = request.form.get('frameDelta', type=int)
     NORMING_VAL = 2194/255
     channel = 0
     if (os.path.splitext(ds_path)[-1] == '.sima'):
@@ -85,7 +85,7 @@ def getFrames():
     frames = {}
     start_frame = int(start_frame)
 
-    for frame_number in xrange(start_frame,start_frame+num_frames):
+    for frame_number in xrange(start_frame, start_frame+num_frames*step, step):
         vol = seq._get_frame(frame_number)
         vol /= NORMING_VAL
         vol = np.clip(vol, 0, 255)

@@ -29,8 +29,21 @@
             margin-top: 20px;
         }
         .warningBox span {
-            text-height:20px;
+            text-height: 20px;
         }
+        .largeLabel {
+            text-align:center;
+            color: #0F0;
+            padding: 15px;
+            width: 100px;
+            height: 50px;
+            margin-top: 20px;
+        }
+        .largeLabel span {
+            text-height:20px;
+            font-size: 40px;
+        }
+
         .button {
             text-align:center;
             color: #0F0;
@@ -114,6 +127,7 @@
         </div>
         <div class="button" id="start_button"><span>start</span></div>
         <div class="button" id="stop_button"><span>stop</span></div>
+        <div class="largeLabel" id="frame_number_label"><span>0/0</span></div>
         <div class="warningBox" id="buffering_warning"><span></span></div>
     </div>
     <div class="canvasContainer">
@@ -159,8 +173,8 @@
         var xProjection
         var yProjection
         var g_filePath
-        var g_viewerFrame
         var g_requestStartFrame
+        var g_frameDelta = 1
 
         function initShaders() {
             var shaderProgram
@@ -327,19 +341,17 @@
                 xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
                 yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
                 image.src = 'data:image/jpeg;base64,'+thisFrame.z
+                $('#frame_number_label span').text(thisFrame.index+'/0')
                 setTimeout(function(){playFramesFromQueue()}, 100)
                 if (!fetching && frameQueue.getLength()<250) {
                     fetching = true
-                    $('#buffering_warning').text('buffering...')
+                    $('#buffering_warning').text('')
                     fetchFrames()
                 }
             } else if (frameQueue.isEmpty()) {
-                $('#buffering_warning').text('buffering.. please wait')
+                $('#buffering_warning').text('buffering... please wait')
                 play = false
             } 
-            
-            //if (fetching && !play){
-            //}
         }
 
         var fetching = false
@@ -351,7 +363,8 @@
                     data: {
                         startFrame: frameIndex,
                         numFrames: 10,
-                        path: g_filePath
+                        path: g_filePath,
+                        frameDelta: g_frameDelta
                     },
                     cache: false,
                 }).done(function(response){
@@ -372,11 +385,11 @@
 
         function queueFrames(response) {
             for (var frame in response) {
+                response[frame].index = frame.split('_')[1]
                 frameQueue.enqueue(response[frame])
             }
         }
 
-        var frame_num;
         image.onload = function() {
             updateTextureData(zProjection.texture)
             updateTextureData(xProjection.texture)
@@ -393,18 +406,20 @@
                 cache: false,
                 data: {
                     image: p.replace(/^data:image\/(png|jpg);base64,/, ""),
-                    filename: 'frame_'+frame_num+'.png'
+                    filename: 'frame_'+g_viewerFrame+'.png'
                 }
             }).done(function(response){
             })*/
-            frame_num++
+            
         }
 
         $('#start_button').click(function() {
-            play = true
-            playFramesFromQueue()
-            if (fetching && play) {
-                $('#buffering_warning').text('buffering..')
+            if (!play) {
+                play = true
+                playFramesFromQueue()
+                if (fetching && play) {
+                    $('#buffering_warning').text('')
+                }
             }
         })
 
@@ -421,7 +436,6 @@
             frameQueue = new Queue()
             $('#buffering_warning').text('buffering.. please wait')
             fetching = true
-            frame_num = 0
             frameIndex = 0
             fetchFrames()
         }
