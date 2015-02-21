@@ -1,0 +1,458 @@
+<html>
+
+<head>
+    <style media="screen" type="text/css">
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+        }
+        #gl_canvas {
+            border: thin solid #0F0;
+            margin: auto auto;
+            display: block;
+        }
+        .floatLeft {
+            float: Left;
+        }
+        .floatRight {
+            float: Right;
+        }
+        .button {
+            text-align:center;
+            color: #0F0;
+            padding: 15px;
+            width: 100px;
+            height: 20px;
+            border: thin solid #0F0;
+        }
+        .button span {
+            text-height:20px;
+        }
+        .button:hover {
+            background-color: #555;
+            cursor: pointer;
+        }
+        .button.selected {
+            background-color: #555;
+        }
+        .button.smallButton {
+            width: 20px;
+            padding: 4px;
+        }
+        .controls {
+            display: block;
+            position: absolute;
+        }
+        .loadBox {
+            position: absolute;
+            display: block;
+            z-index: 100;
+            background-color: #000;
+            color: #0F0;
+            width: 450px;
+            height: 115px;
+            border: thin solid #0F0;
+            padding: 10px 40px;
+        }
+        .hidden {
+            display: None;
+        }
+        .loadBox p {
+            margin: 5px;
+            padding: 0px;
+            float: left;
+            width:100%
+        }
+        .loadBox input {
+            line-height:2;
+            width: 300px;
+        }
+        .loadBox select{
+            line-height:2;
+            min-width: 300px;
+            margin: 5px 0px;
+        }
+        .width100 {
+            width: 100%;
+        }
+    </style>
+
+    <title>my awesome website</title>
+
+</head>
+
+<body>
+    
+    <div class="controls">
+        <div class="button selected" id="load_button"><span>load</span></div>
+        <div class="loadBox" id="load_box">
+            <p>file selection:</p>
+            <p style="width:auto;margin:0px 5px">
+                <input type="text" id="file_input" class="textInput floatLeft">
+                <div class="button smallButton floatLeft" id="file_get"><span>go</span></div>
+                <div class="button smallButton floatRight" id="file_cancel"><span>X</span></div>
+            </p>
+            <div class="width100"></div>
+            <p style="width:auto;margin:0px 5px">
+                <select id="file_select"></select>
+                <div class="button smallButton floatLeft" id="file_up_level"><span>..</span></div>
+            </p>
+        </div>
+        <div class="button" id="start_button"><span>start</span></div>
+        <div class=button id="stop_button"><span>stop</span></div>
+        <div class=button id="stop_button"><span>stop</span></div>
+    </div>
+    <div class="canvasContainer">
+        <canvas id="gl_canvas" width="800" height="700"></canvas>
+    </div>
+
+    <script type="text/javascript" 
+        src="{{ url_for('static', filename='scripts/jquery-1.11.2.min.js') }}"></script>
+    <script type="text/javascript" 
+        src="{{ url_for('static', filename='scripts/glMatrix-0.9.5.min.js') }}"></script>
+    <script type="text/javascript" 
+        src="{{ url_for('static', filename='scripts/Queue.js') }}"></script>
+    <script type="text/javascript" 
+        src="{{ url_for('static', filename='scripts/webgl_helpers.js') }}"></script>
+
+    <script id="shader-fs" type="x-shader/x-fragment">
+        precision mediump float;
+
+        varying vec2 vTextureCoord;
+        uniform sampler2D uSampler;
+        void main(void) {
+            gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+        }
+    </script>
+
+    <script id="shader-vs" type="x-shader/x-vertex">
+        attribute vec3 aVertexPosition;
+        attribute vec2 aTextureCoord;
+        varying vec2 vTextureCoord;
+
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
+
+        void main(void) {
+            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+            vTextureCoord = aTextureCoord;
+        }
+    </script>
+
+    <script type="text/javascript">
+        var gl
+        var zProjection
+        var xProjection
+        var yProjection
+        var g_filePath
+        var g_viewerFrame
+        var g_requestStartFrame
+
+        function initShaders() {
+            var shaderProgram
+            var fragmentShader = getShader(gl, "shader-fs")
+            var vertexShader = getShader(gl, "shader-vs")
+
+            shaderProgram = gl.createProgram()
+            gl.attachShader(shaderProgram, vertexShader)
+            gl.attachShader(shaderProgram, fragmentShader)
+            gl.linkProgram(shaderProgram)
+
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                alert("Cold not initialise shaders")
+            }
+            gl.useProgram(shaderProgram)
+
+            shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition")
+            gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute)
+
+            shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord")
+            gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute)
+
+            shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix")
+            shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix")
+            shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler")
+            
+            return shaderProgram
+        }
+
+
+        var mvMatrix = mat4.create()
+        var pMatrix = mat4.create()
+        function setMatrixUniforms() {
+            gl.uniformMatrix4fv(zProjection.shaderProgram.pMatrixUniform, false, pMatrix)
+            gl.uniformMatrix4fv(zProjection.shaderProgram.mvMatrixUniform, false, mvMatrix)
+            gl.uniformMatrix4fv(xProjection.shaderProgram.pMatrixUniform, false, pMatrix)
+            gl.uniformMatrix4fv(xProjection.shaderProgram.mvMatrixUniform, false, mvMatrix)
+            gl.uniformMatrix4fv(yProjection.shaderProgram.pMatrixUniform, false, pMatrix)
+            gl.uniformMatrix4fv(yProjection.shaderProgram.mvMatrixUniform, false, mvMatrix)
+        }
+        
+        var squareVertexPositionBuffer
+        var textureCoordBuffer
+        function initBuffers() {
+            squareVertexPositionBuffer = createSquareVertexPositionBuffer(gl,2.0,2.0)
+            textureCoordBuffer = createTextureCoordBuffer()
+        }
+
+        var image = new Image()
+        function getNextFrame(response) {
+            image.src = 'data:image/jpeg;base64,'+response.z_projection
+            xProjection.texture.image.src = 'data:image/jpeg;base64,'+response.x_projection
+            yProjection.texture.image.src = 'data:image/jpeg;base64,'+response.y_projection
+        }
+    
+        function drawScene() {
+            gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+            mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix)
+
+            mat4.identity(mvMatrix)
+
+            mat4.translate(mvMatrix, [-0.25, 0.25, -3.5])
+            gl.bindBuffer(gl.ARRAY_BUFFER, zProjection.vertexPositionBuffer)
+            gl.vertexAttribPointer(zProjection.shaderProgram.vertexPositionAttribute, 
+                    zProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, zProjection.textureCoordBuffer)
+            gl.vertexAttribPointer(zProjection.shaderProgram.textureCoordAttribute, 
+                    zProjection.textureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0)
+
+            gl.activeTexture(gl.TEXTURE0)
+            gl.bindTexture(gl.TEXTURE_2D, zProjection.texture)
+            gl.uniform1i(zProjection.shaderProgram.samplerUniform, 0)
+            
+            setMatrixUniforms()
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, zProjection.vertexPositionBuffer.numItems)
+
+            mat4.translate(mvMatrix, [1.35, 0.0, 0.0])
+            gl.bindBuffer(gl.ARRAY_BUFFER, xProjection.vertexPositionBuffer)
+            gl.vertexAttribPointer(xProjection.shaderProgram.vertexPositionAttribute, 
+                    xProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, xProjection.textureCoordBuffer)
+            gl.vertexAttribPointer(xProjection.shaderProgram.textureCoordAttribute, 
+                    xProjection.textureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0)
+
+            gl.activeTexture(gl.TEXTURE0)
+            gl.bindTexture(gl.TEXTURE_2D, xProjection.texture)
+            gl.uniform1i(xProjection.shaderProgram.samplerUniform, 0)
+
+            setMatrixUniforms()
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, xProjection.vertexPositionBuffer.numItems)
+
+            mat4.translate(mvMatrix, [-1.35, -1.35, 0.0])
+            gl.bindBuffer(gl.ARRAY_BUFFER, yProjection.vertexPositionBuffer)
+            gl.vertexAttribPointer(yProjection.shaderProgram.vertexPositionAttribute, 
+                    yProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, yProjection.textureCoordBuffer)
+            gl.vertexAttribPointer(yProjection.shaderProgram.textureCoordAttribute, 
+                    yProjection.textureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0)
+
+            gl.activeTexture(gl.TEXTURE0)
+            gl.bindTexture(gl.TEXTURE_2D, yProjection.texture)
+            gl.uniform1i(yProjection.shaderProgram.samplerUniform, 0)
+            
+            setMatrixUniforms()
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
+        }
+
+        var play
+        var frameIndex
+        $("#gl_canvas").ready(function webGLStart (){
+            frameIndex = 0
+            var canvas = document.getElementById("gl_canvas")
+            gl = initGL(canvas)
+            zProjection = {
+                shaderProgram: initShaders(),
+                vertexPositionBuffer: 
+                    createSquareVertexPositionBuffer(gl,2.0,2.0),
+                textureCoordBuffer: createTextureCoordBuffer(),
+                texture: gl.createTexture()
+            }
+            zProjection.texture.image = image
+
+            xProjection = {
+                shaderProgram: initShaders(),
+                vertexPositionBuffer: 
+                    createSquareVertexPositionBuffer(gl,0.5,2.0),
+                textureCoordBuffer: createTextureCoordBuffer(),
+                texture: gl.createTexture()
+            }           
+            xProjection.texture.image = new Image()
+
+            yProjection = {
+                shaderProgram: initShaders(),
+                vertexPositionBuffer: 
+                    createSquareVertexPositionBuffer(gl,2.0,0.5),
+                textureCoordBuffer: createTextureCoordBuffer(),
+                texture: gl.createTexture()
+            }           
+            yProjection.texture.image = new Image()
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0)
+            gl.enable(gl.DEPTH_TEST)
+            $.ajax({
+                url: '/getFrame/'+frameIndex,
+                type: 'GET',
+                cache: false,
+            }).done(function(response){
+                //getNextFrame(response)
+            })
+            play = false
+            fetchFrames()
+
+        })
+        
+        var frameQueue
+        function playFramesFromQueue() {
+             if (!frameQueue.isEmpty() && play) {
+                var thisFrame = frameQueue.dequeue()
+                xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
+                yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
+                image.src = 'data:image/jpeg;base64,'+thisFrame.z
+                setTimeout(function(){playFramesFromQueue()}, 100)
+                if (!fetching && frameQueue.getLength()<250) {
+                    fetching = true
+                    fetchFrames()
+                }
+            }
+                
+        }
+
+        var fetching = false
+        function fetchFrames() {
+            if (fetching) {
+                $.ajax({
+                    url: '/getFrames',
+                    type: 'POST',
+                    data: {
+                        startFrame: frameIndex,
+                        numFrames: 10,
+                        path: g_filePath
+                    },
+                    cache: false,
+                }).done(function(response){
+                    if (frameQueue.getLength() < 250) {
+                        frameIndex += 10
+                        fetchFrames() 
+                    } else {
+                        fetching = false
+                    }
+
+                    queueFrames(response)
+                })
+            }
+        }
+
+        function queueFrames(response) {
+            for (var frame in response) {
+                frameQueue.enqueue(response[frame])
+            }
+        }
+
+        var frame_num;
+        image.onload = function() {
+            updateTextureData(zProjection.texture)
+            updateTextureData(xProjection.texture)
+            updateTextureData(yProjection.texture)
+            drawScene()
+            //
+            //THIS IS FOR SAVING THE CANVAS AS PNG FILES
+            //
+            /*var c = document.getElementById('gl_canvas')
+            var p = c.toDataURL()
+            $.ajax({
+                url: '/saveImage',
+                type: 'POST',
+                cache: false,
+                data: {
+                    image: p.replace(/^data:image\/(png|jpg);base64,/, ""),
+                    filename: 'frame_'+frame_num+'.png'
+                }
+            }).done(function(response){
+            })*/
+            frame_num++
+        }
+
+        $('#start_button').click(function() {
+            play = true
+            playFramesFromQueue()
+        })
+
+        $('#stop_button').click(function() {
+            play = false
+        })
+
+
+        function setSelectedData() {
+            g_filePath = $('#file_input').val()
+            frameQueue = new Queue()
+            fetching = true
+            frame_num = 0
+            frameIndex=0
+            fetchFrames()
+        }
+
+        function fileSelection(file) {
+            var fullPath = $('#file_input').val()
+            if (!fullPath) {
+                fullPath = '/'
+            }
+            if (file != '') {
+                if (fullPath.slice(-1) != '/') {
+                    fullPath = fullPath + '/'
+                }
+                fullPath = fullPath + file  
+                $('#file_input').val(fullPath)
+            }
+
+            if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
+                $('#load_box').addClass('hidden')
+                $('#load_button').removeClass('selected')
+                setSelectedData()
+            } else {
+                $('#file_select').prop('disabled', true);
+                $.get('/getFolders/'+fullPath.replace(/\//g , ":!"),function(html) {
+                    $('#file_select').html('')
+                    $('#file_select').html(html)
+                    $('#file_select').prop('disabled', false);
+                })
+            }
+        }
+
+        $('#file_select').change(function() {
+            fileSelection($('#file_select').val())
+        })
+
+        $('#file_get').click(function() {
+            fileSelection('')
+        })
+
+        $('#load_button').click(function(){
+            $('#load_button').addClass('selected')
+            $('#load_box').removeClass('hidden')
+        })
+
+        $('#file_up_level').click(function() {
+            var path = $('#file_input').val()
+            if (path) {
+                $('#file_input').val(path.substring(0,path.lastIndexOf('/')))
+                fileSelection('') 
+            }
+        })
+
+        $('#file_cancel').click(function() {
+            $('#load_box').addClass('hidden')
+            $('#load_button').removeClass('selected')
+        })
+    </script>
+
+</body>
+
+</html>
