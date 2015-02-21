@@ -1,5 +1,4 @@
 from app import app
-from app.bin import dbManager
 import config
 
 from sys import path
