@@ -20,6 +20,17 @@
         .floatRight {
             float: Right;
         }
+        .warningBox {
+            text-align:center;
+            color: #0F0;
+            padding: 15px;
+            width: 100px;
+            height: 50px;
+            margin-top: 20px;
+        }
+        .warningBox span {
+            text-height:20px;
+        }
         .button {
             text-align:center;
             color: #0F0;
@@ -102,7 +113,8 @@
             </p>
         </div>
         <div class="button" id="start_button"><span>start</span></div>
-        <div class=button id="stop_button"><span>stop</span></div>
+        <div class="button" id="stop_button"><span>stop</span></div>
+        <div class="warningBox" id="buffering_warning"><span></span></div>
     </div>
     <div class="canvasContainer">
         <canvas id="gl_canvas" width="800" height="700"></canvas>
@@ -320,8 +332,9 @@
                     fetching = true
                     fetchFrames()
                 }
+            } else if (frameQueue.isEmpty()) {
+                $('#buffering_warning').text('buffering.. please wait')
             }
-                
         }
 
         var fetching = false
@@ -340,10 +353,11 @@
                     if (frameQueue.getLength() < 250) {
                         frameIndex += 10
                         fetchFrames() 
-                    } else {
+                        $('#buffering_warning').text('buffering... press start to resume playback')
+                    }  else {
                         fetching = false
+                        $('#buffering_warning').text('')
                     }
-
                     queueFrames(response)
                 })
             }
@@ -392,9 +406,10 @@
         function setSelectedData() {
             g_filePath = $('#file_input').val()
             frameQueue = new Queue()
+            $('#buffering_warning').text('buffering.. please wait')
             fetching = true
             frame_num = 0
-            frameIndex=0
+            frameIndex = 0
             fetchFrames()
         }
 
