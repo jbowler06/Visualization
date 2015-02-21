@@ -330,11 +330,16 @@
                 setTimeout(function(){playFramesFromQueue()}, 100)
                 if (!fetching && frameQueue.getLength()<250) {
                     fetching = true
+                    $('#buffering_warning').text('buffering...')
                     fetchFrames()
                 }
             } else if (frameQueue.isEmpty()) {
                 $('#buffering_warning').text('buffering.. please wait')
-            }
+                play = false
+            } 
+            
+            //if (fetching && !play){
+            //}
         }
 
         var fetching = false
@@ -353,7 +358,9 @@
                     if (frameQueue.getLength() < 250) {
                         frameIndex += 10
                         fetchFrames() 
-                        $('#buffering_warning').text('buffering... press start to resume playback')
+                        if (frameQueue.getLength() == 0 && !play) {
+                            $('#buffering_warning').text('buffering... press start to resume playback')
+                        }
                     }  else {
                         fetching = false
                         $('#buffering_warning').text('')
@@ -396,10 +403,16 @@
         $('#start_button').click(function() {
             play = true
             playFramesFromQueue()
+            if (fetching && play) {
+                $('#buffering_warning').text('buffering..')
+            }
         })
 
         $('#stop_button').click(function() {
             play = false
+            if (fetching) {
+                $('#buffering_warning').text('buffering... press start to resume playback')
+            }
         })
 
 
