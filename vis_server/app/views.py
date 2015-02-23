@@ -74,6 +74,7 @@ def getFrames():
     ds_path = request.form.get('path')
     start_frame = request.form.get('startFrame')
     step = request.form.get('frameDelta', type=int)
+    num_frames = request.form.get('numFrames', type=int)
     NORMING_VAL = 2194/255
     channel = 0
     if (os.path.splitext(ds_path)[-1] == '.sima'):
@@ -81,7 +82,6 @@ def getFrames():
         seq = ds.__iter__().next()
     else:
         seq = Sequence.create('HDF5',ds_path,'tzyxc')
-    num_frames = 10
     frames = {}
     start_frame = int(start_frame)
 

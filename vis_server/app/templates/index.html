@@ -43,7 +43,14 @@
             text-height:20px;
             font-size: 40px;
         }
-
+        .smallLabel {
+            margin: -20px 0px 20px 20px;
+        }
+        .smallLabel span {
+            text-height:10px;
+            font-size: 18px;
+            color: #0F0;
+        }
         .button {
             text-align:center;
             color: #0F0;
@@ -65,6 +72,9 @@
         .button.smallButton {
             width: 20px;
             padding: 4px;
+        }
+        .button.halfButton {
+            width: 35px;
         }
         .controls {
             display: block;
@@ -99,6 +109,15 @@
             min-width: 300px;
             margin: 5px 0px;
         }
+        .loadBox table {
+            color: #0F0;
+        }
+        .loadBox td {
+            padding: 5px 15px;
+        }
+        .loadBox table input{
+            width: 75px;
+        }
         .width100 {
             width: 100%;
         }
@@ -124,10 +143,33 @@
                 <select id="file_select"></select>
                 <div class="button smallButton floatLeft" id="file_up_level"><span>..</span></div>
             </p>
+         </div>
+         <div class="button" id="options_button"><span>options</span></div>
+         <div class="loadBox hidden" id="options_box">
+            <p style="width:auto;margin:0px 5px">
+                <table class="floatLeft">
+                    <tr>
+                        <td>frame rate:</td>
+                        <td><input type="text" id="frame_rate_input" class="textInput floatLeft"></td>
+                        <td>Hz</td>
+                    </tr>
+                    <tr>
+                        <td>packet size:</td>
+                        <td><input type="text" id="packet_size_input" class="textInput floatLeft"></td>
+                        <td>frames</td>
+                    </tr>
+                </table>
+                <div class="button smallButton floatRight" id="options_cancel"><span>ok</span></div>
+            </p>
         </div>
         <div class="button" id="start_button"><span>start</span></div>
         <div class="button" id="stop_button"><span>stop</span></div>
         <div class="largeLabel" id="frame_number_label"><span>0/0</span></div>
+        <div class="smallLabel" id="step_size_label"><span>step size: <span id="step_size_span">1</span></span></div>
+        <div>
+        <div class="button halfButton floatLeft" id="reduce_step_button"><span>&#60;&#60;</span></div>
+        <div class="button halfButton floatLeft" id="increase_step_button"><span>&#62;&#62;</span></div>
+        </div>
         <div class="warningBox" id="buffering_warning"><span></span></div>
     </div>
     <div class="canvasContainer">
@@ -175,6 +217,9 @@
         var g_filePath
         var g_requestStartFrame
         var g_frameDelta = 1
+        var g_frameRate = 166.66
+        var g_packetSize = 10
+        var g_frameBuffer
 
         function initShaders() {
             var shaderProgram
@@ -342,7 +387,7 @@
                 yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
                 image.src = 'data:image/jpeg;base64,'+thisFrame.z
                 $('#frame_number_label span').text(thisFrame.index+'/0')
-                setTimeout(function(){playFramesFromQueue()}, 100)
+                setTimeout(function(){playFramesFromQueue()}, g_frameRate)
                 if (!fetching && frameQueue.getLength()<250) {
                     fetching = true
                     $('#buffering_warning').text('')
@@ -362,14 +407,14 @@
                     type: 'POST',
                     data: {
                         startFrame: frameIndex,
-                        numFrames: 10,
+                        numFrames: g_packetSize,
                         path: g_filePath,
                         frameDelta: g_frameDelta
                     },
                     cache: false,
                 }).done(function(response){
                     if (frameQueue.getLength() < 250) {
-                        frameIndex += 10
+                        frameIndex += g_packetSize
                         fetchFrames() 
                         if (frameQueue.getLength() == 0 && !play) {
                             $('#buffering_warning').text('buffering... press start to resume playback')
@@ -425,19 +470,23 @@
 
         $('#stop_button').click(function() {
             play = false
-            if (fetching) {
+            if (fetching && frameQueue.getLength() != 0) {
                 $('#buffering_warning').text('buffering... press start to resume playback')
             }
         })
 
 
-        function setSelectedData() {
+        function setSelectedData(newFrameIndex) {
             g_filePath = $('#file_input').val()
-            frameQueue = new Queue()
-            $('#buffering_warning').text('buffering.. please wait')
-            fetching = true
-            frameIndex = 0
-            fetchFrames()
+            if (g_filePath) {
+                frameQueue = new Queue()
+                $('#buffering_warning').text('buffering.. please wait')
+                fetching = true
+                if (!newFrameIndex) {
+                    frameIndex = 0
+                }
+                fetchFrames()
+            }
         }
 
         function fileSelection(file) {
@@ -480,6 +529,21 @@
             $('#load_box').removeClass('hidden')
         })
 
+        $('#options_button').click(function(){
+            $('#options_button').addClass('selected')
+            $('#options_box').removeClass('hidden')
+
+            $('#frame_rate_input').val(Math.round(String(1000/g_frameRate)))
+            $('#packet_size_input').val(g_packetSize)
+        })
+
+        $('#options_cancel').click(function() {
+            $('#options_box').addClass('hidden')
+            $('#options_button').removeClass('selected')
+            g_frameRate = 1000/$('#frame_rate_input').val()
+            g_packetSize = parseInt($('#packet_size_input').val(),10)
+        })
+
         $('#file_up_level').click(function() {
             var path = $('#file_input').val()
             if (path) {
@@ -492,6 +556,31 @@
             $('#load_box').addClass('hidden')
             $('#load_button').removeClass('selected')
         })
+
+        $('#increase_step_button').click(function() {
+            if (g_frameDelta > 0) {
+                g_frameDelta *= 2
+            } else if (g_frameDelta == -1) {
+                g_frameDelta *= -1
+            } else {
+                g_frameDelta /= 2
+            }
+            $('#step_size_span').text(g_frameDelta)
+            setSelectedData(frameIndex)
+        })
+
+        $('#reduce_step_button').click(function() {
+            if (g_frameDelta < 0) {
+                g_frameDelta *= 2
+            } else if (g_frameDelta == 1) {
+                g_frameDelta *= -1
+            } else {
+                g_frameDelta /= 2
+            }
+            $('#step_size_span').text(g_frameDelta)
+            setSelectedData(frameIndex)
+        })
+
     </script>
 
 </body>
