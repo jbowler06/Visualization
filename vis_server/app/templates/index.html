@@ -8,6 +8,7 @@
             margin: 0;
             padding: 0;
             background-color: #000;
+            color: #F00;
         }
         #gl_canvas {
             border: thin solid #0F0;
@@ -171,6 +172,11 @@
         <div class="button halfButton floatLeft" id="increase_step_button"><span>&#62;&#62;</span></div>
         </div>
         <div class="warningBox" id="buffering_warning"><span></span></div>
+        <div> 
+            <p>min:<span id="buff_min"></span>
+            <p>max:<span id="buff_max"></span>
+            <p>curr:<span id="buff_curr"></span>
+        </div>
     </div>
     <div class="canvasContainer">
         <canvas id="gl_canvas" width="800" height="700"></canvas>
@@ -218,8 +224,28 @@
         var g_requestStartFrame
         var g_frameDelta = 1
         var g_frameRate = 166.66
-        var g_packetSize = 10
-        var g_frameBuffer
+        var g_packetSize = 4
+        var g_frameBuffer = {}
+        g_frameBuffer.buffer = {}
+        g_frameBuffer.frameDelta = 1
+        g_frameBuffer.length = function() { return Object.keys(this.buffer).length }
+        g_frameBuffer.maxLength = 100
+        g_frameBuffer.current = -1
+        g_frameBuffer.next = function() { return this.current + this.frameDelta }
+        g_frameBuffer.min = function() {
+            if (this.current < 0) {
+                return 0
+            }
+             var sorted = Object.keys(this.buffer).sort(function(a,b){return a-b})
+             return sorted[0]
+        }
+        g_frameBuffer.max = function() {
+            if (this.current < 0) {
+                return 0
+            }
+            var sorted = Object.keys(this.buffer).sort(function(a,b){return b-a})
+            return sorted[0]
+        }
 
         function initShaders() {
             var shaderProgram
@@ -333,9 +359,7 @@
         }
 
         var play
-        var frameIndex
         $("#gl_canvas").ready(function webGLStart (){
-            frameIndex = 0
             var canvas = document.getElementById("gl_canvas")
             gl = initGL(canvas)
             zProjection = {
@@ -367,73 +391,108 @@
 
             gl.clearColor(0.0, 0.0, 0.0, 1.0)
             gl.enable(gl.DEPTH_TEST)
-            $.ajax({
+            /*$.ajax({
                 url: '/getFrame/'+frameIndex,
                 type: 'GET',
                 cache: false,
             }).done(function(response){
                 //getNextFrame(response)
-            })
+            })*/
             play = false
-            fetchFrames()
+            //fetchFrames()
 
         })
         
         var frameQueue
         function playFramesFromQueue() {
-             if (!frameQueue.isEmpty() && play) {
-                var thisFrame = frameQueue.dequeue()
+            $('#buff_min').text(g_frameBuffer.min())
+            $('#buff_max').text(g_frameBuffer.max())
+            var nextFrame = g_frameBuffer.next()
+            if (g_frameBuffer.buffer.hasOwnProperty(nextFrame) && play) {
+                $('#buff_curr').text(nextFrame)
+                g_frameBuffer.current = nextFrame
+                var thisFrame = g_frameBuffer.buffer[nextFrame]
                 xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
                 yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
                 image.src = 'data:image/jpeg;base64,'+thisFrame.z
                 $('#frame_number_label span').text(thisFrame.index+'/0')
                 setTimeout(function(){playFramesFromQueue()}, g_frameRate)
-                if (!fetching && frameQueue.getLength()<250) {
+
+                if (!fetching && g_frameBuffer.max()-nextFrame <g_frameBuffer.maxLength) {
                     fetching = true
                     $('#buffering_warning').text('')
                     fetchFrames()
                 }
-            } else if (frameQueue.isEmpty()) {
+
+            } else if (!g_frameBuffer.buffer.hasOwnProperty(nextFrame)) {
                 $('#buffering_warning').text('buffering... please wait')
                 play = false
+                if (!fetching) {
+                    fetching = true
+                    fetchFrames()
+                }
             } 
         }
 
-        var fetching = false
+        var fetching = true
         function fetchFrames() {
             if (fetching) {
-                $.ajax({
-                    url: '/getFrames',
-                    type: 'POST',
-                    data: {
-                        startFrame: frameIndex,
-                        numFrames: g_packetSize,
-                        path: g_filePath,
-                        frameDelta: g_frameDelta
-                    },
-                    cache: false,
-                }).done(function(response){
-                    if (frameQueue.getLength() < 250) {
-                        frameIndex += g_packetSize
-                        fetchFrames() 
-                        if (frameQueue.getLength() == 0 && !play) {
+                var delta = g_frameBuffer.frameDelta
+                var frameIndex = g_frameBuffer.current
+                while (g_frameBuffer.buffer.hasOwnProperty(frameIndex)) {
+                    frameIndex += delta
+                }
+                if (Math.abs(frameIndex - g_frameBuffer.current)*3/4 <= Math.abs(g_frameBuffer.maxLength*delta)) {
+                        $.ajax({
+                            url: '/getFrames',
+                        type: 'POST',
+                        data: {
+                            startFrame: frameIndex,
+                            numFrames: g_packetSize,
+                            path: g_filePath,
+                            frameDelta: delta
+                        },
+                        cache: false,
+                    }).done(function(response) {
+                        if (response.hasOwnProperty('frame_'+g_frameBuffer.next())) {
                             $('#buffering_warning').text('buffering... press start to resume playback')
                         }
-                    }  else {
-                        fetching = false
+                        frameIndex += g_packetSize*delta
+                        var index
+                        for (var frame in response) {
+                            index = frame.split('_')[1]
+                            response[frame].index = index
+                            g_frameBuffer.buffer[index] = response[frame]
+                        }
+
+                        $('#buff_min').text(g_frameBuffer.min())
+                        $('#buff_max').text(index)
+                        $('#buff_curr').text(g_frameBuffer.current)
+                        fetchFrames() 
+
+                        var minFrame = g_frameBuffer.min()
+                        var maxFrame = g_frameBuffer.max()
+                        if (g_frameBuffer.frameDelta > 0) {
+                            while (g_frameBuffer.length() > g_frameBuffer.maxLength) {
+                                delete g_frameBuffer.buffer[g_frameBuffer.min()]
+                            }
+                        } else {
+                            while (g_FrameBuffer.length() > g_frameBuffer.maxLength) {
+                                delete g_frameBuffer.buffer[g_frameBuffer.max()]
+                            }
+                        }
+                    })
+                } else {
+                    fetching = false
+                    if (play) {
                         $('#buffering_warning').text('')
+                    } else {
+                        $('#buffering_warning').text('press start to resume playback')
                     }
-                    queueFrames(response)
-                })
-            }
+                 }
+             }
         }
 
-        function queueFrames(response) {
-            for (var frame in response) {
-                response[frame].index = frame.split('_')[1]
-                frameQueue.enqueue(response[frame])
-            }
-        }
 
         image.onload = function() {
             updateTextureData(zProjection.texture)
@@ -479,14 +538,13 @@
         function setSelectedData(newFrameIndex) {
             g_filePath = $('#file_input').val()
             if (g_filePath) {
-                frameQueue = new Queue()
                 $('#buffering_warning').text('buffering.. please wait')
                 fetching = true
-                if (!newFrameIndex) {
-                    frameIndex = 0
-                }
                 fetchFrames()
             }
+            $('#buff_min').text(g_frameBuffer.min())
+            $('#buff_max').text(g_frameBuffer.max())
+            $('#buff_curr').text(g_frameBuffer.current)
         }
 
         function fileSelection(file) {
@@ -558,27 +616,36 @@
         })
 
         $('#increase_step_button').click(function() {
-            if (g_frameDelta > 0) {
-                g_frameDelta *= 2
-            } else if (g_frameDelta == -1) {
-                g_frameDelta *= -1
+            if (g_frameBuffer.frameDelta > 0) {
+                g_frameBuffer.frameDelta *= 2
+            } else if (g_frameBuffer.frameDelta == -1) {
+                g_frameBuffer.frameDelta *= -1
             } else {
-                g_frameDelta /= 2
+                g_frameBuffer.frameDelta /= 2
             }
-            $('#step_size_span').text(g_frameDelta)
-            setSelectedData(frameIndex)
+            $('#step_size_span').text(g_frameBuffer.frameDelta)
+
+            if (!fetching) {
+                fetching = true
+                fetchFrames()
+            }
+
         })
 
         $('#reduce_step_button').click(function() {
-            if (g_frameDelta < 0) {
-                g_frameDelta *= 2
-            } else if (g_frameDelta == 1) {
-                g_frameDelta *= -1
+            if (g_frameBuffer.frameDelta < 0) {
+                g_frameBuffer.frameDelta *= 2
+            } else if (g_frameBuffer.frameDelta == 1) {
+                g_frameBuffer.frameDelta *= -1
             } else {
-                g_frameDelta /= 2
+                g_frameBuffer.frameDelta /= 2
             }
-            $('#step_size_span').text(g_frameDelta)
-            setSelectedData(frameIndex)
+            $('#step_size_span').text(g_frameBuffer.frameDelta)
+
+            if (!fetching) {
+                fetching = true
+                fetchFrames()
+            }
         })
 
     </script>
