@@ -163,6 +163,11 @@
                         <td><input type="text" id="buffer_size_input" class="textInput floatLeft"></td>
                         <td>frames</td>
                     </tr>
+                    <tr>
+                        <td>normalizing constant:</td>
+                        <td><input type="text" id="norming_value_input" class="textInput floatLeft"></td>
+                        <td>frames</td>
+                    </tr>
                 </table>
                 <div class="button smallButton floatRight" id="options_cancel"><span>ok</span></div>
             </p>
@@ -233,30 +238,10 @@
         var g_frameDelta = 1
         var g_frameRate = 166.66
         var g_packetSize = 8
+        var g_normingVal = 2194
 
         var g_sequenceInfo = {}
         g_sequenceInfo.max = 1
-
-        /*g_frameBuffer.buffer = {}
-        g_frameBuffer.frameDelta = 1
-        g_frameBuffer.length = function() { return Object.keys(this.buffer).length }
-        g_frameBuffer.maxLength = 350
-        g_frameBuffer.current = -1
-        g_frameBuffer.next = function() { return this.current + this.frameDelta }
-        g_frameBuffer.min = function() {
-            if (this.current < 0) {
-                return 0
-            }
-             var sorted = Object.keys(this.buffer).sort(function(a,b){return a-b})
-             return sorted[0]
-        }
-        g_frameBuffer.max = function() {
-            if (this.current < 0) {
-                return 0
-            }
-            var sorted = Object.keys(this.buffer).sort(function(a,b){return b-a})
-            return sorted[0]
-        }*/
 
         function initShaders() {
             var shaderProgram
@@ -402,19 +387,10 @@
 
             gl.clearColor(0.0, 0.0, 0.0, 1.0)
             gl.enable(gl.DEPTH_TEST)
-            /*$.ajax({
-                url: '/getFrame/'+frameIndex,
-                type: 'GET',
-                cache: false,
-            }).done(function(response){
-                //getNextFrame(response)
-            })*/
+            
             play = false
-            //fetchFrames()
-
         })
         
-        var frameQueue
         function playFramesFromQueue() {
             $('#buff_min').text(g_frameBuffer.min())
             $('#buff_max').text(g_frameBuffer.max())
@@ -426,7 +402,7 @@
                 xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
                 yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
                 image.src = 'data:image/jpeg;base64,'+thisFrame.z
-                $('#this_frame_label').text(thisFrame.index)
+                $('#this_frame_label').text(parseInt(thisFrame.index)+1)
                 setTimeout(function(){playFramesFromQueue()}, g_frameRate)
 
                 if (!fetching && g_frameBuffer.max()-nextFrame <g_frameBuffer.maxLength) {
@@ -461,32 +437,41 @@
                 }
 
                 if ((delta != 0)&&(Math.abs(frameIndex - g_frameBuffer.current)*4/3 <= Math.abs(g_frameBuffer.maxLength*delta))) {
-                        $.ajax({
-                            url: '/getFrames',
+                    $.ajax({
+                    url: '/getFrames',
                         type: 'POST',
                         data: {
                             startFrame: frameIndex,
                             numFrames: g_packetSize,
                             path: g_filePath,
-                            frameDelta: delta
+                            frameDelta: delta,
+                            normingVal: g_normingVal
                         },
                         cache: false,
                     }).done(function(response) {
                         if (response.hasOwnProperty('frame_'+g_frameBuffer.next())) {
                             $('#buffering_warning').text('buffering... press start to resume playback')
                         }
-                        frameIndex += g_packetSize*delta
                         var index
+                        var name
                         for (var frame in response) {
-                            index = frame.split('_')[1]
-                            response[frame].index = index
-                            g_frameBuffer.buffer[index] = response[frame]
+                            name = frame.split('_')
+                            if (name[0] == 'frame') {
+                                index = name[1]
+                                response[frame].index = index
+                                g_frameBuffer.buffer[index] = response[frame]
+                                frameIndex++
+                            }
                         }
 
                         $('#buff_min').text(g_frameBuffer.min())
                         $('#buff_max').text(g_frameBuffer.max())
                         $('#buff_curr').text(g_frameBuffer.current)
-                        fetchFrames() 
+                        if (response.end != true) {
+                            fetchFrames() 
+                        } else {
+                            fetching = false
+                        }
 
                         var minFrame = g_frameBuffer.min()
                         var maxFrame = g_frameBuffer.max()
@@ -623,6 +608,7 @@
             $('#frame_rate_input').val(Math.round(String(1000/g_frameRate)))
             $('#packet_size_input').val(g_packetSize)
             $('#buffer_size_input').val(g_frameBuffer.maxLength)
+            $('#norming_value_input').val(g_normingVal)
         })
 
         $('#options_cancel').click(function() {
@@ -631,6 +617,15 @@
             g_frameRate = 1000/$('#frame_rate_input').val()
             g_packetSize = parseInt($('#packet_size_input').val(),10)
             g_frameBuffer.maxLength = parseInt($('#buffer_size_input').val(),10)
+            var normingVal = $('#norming_value_input').val()
+            if (normingVal != g_normingVal) {
+                g_frameBuffer.buffer = {}
+                g_normingVal = normingVal
+                if (!fetching) {
+                    fetching = true
+                    fetchFrames()
+                }
+            }
         })
 
         $('#file_up_level').click(function() {

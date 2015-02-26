@@ -86,7 +86,7 @@ def getFrames():
     start_frame = request.form.get('startFrame')
     step = request.form.get('frameDelta', type=int)
     num_frames = request.form.get('numFrames', type=int)
-    NORMING_VAL = 2194/255
+    norming_val = request.form.get('normingVal', type=int)/255
     channel = 0
     if (os.path.splitext(ds_path)[-1] == '.sima'):
         ds = ImagingDataset.load(ds_path)
@@ -94,11 +94,15 @@ def getFrames():
     else:
         seq = Sequence.create('HDF5',ds_path,'tzyxc')
     frames = {}
+    end = False
     start_frame = int(start_frame)
+    if (start_frame+num_frames > len(seq)):
+        num_frames = len(seq)-start_frame
+        end = True
 
     for frame_number in xrange(start_frame, start_frame+num_frames*step, step):
         vol = seq._get_frame(frame_number)
-        vol /= NORMING_VAL
+        vol /= norming_val
         vol = np.clip(vol, 0, 255)
         surf = np.nanmean(vol,axis=0)[:,:,channel]
         img = Image.fromarray(surf.astype('uint8'),'L')
@@ -124,7 +128,7 @@ def getFrames():
             'x':base64.b64encode(img_io_x.read())
         }
 
-    return jsonify(**frames)
+    return jsonify(end=end,**frames)
 
 @app.route('/getFolders/<directory>')
 def getFolders(directory):
