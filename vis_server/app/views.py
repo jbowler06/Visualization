@@ -35,6 +35,14 @@ import struct
 def index():
     return render_template('index.html')
 
+@app.route('/getInfo', methods=['GET','POST'])
+def getInfo():
+    ds_path = request.form.get('path')
+    ds = ImagingDataset.load(ds_path)
+    seq = ds.__iter__().next()
+
+    return jsonify(max=len(seq))
+
 @app.route('/getFrame/<frame_number>', methods=['GET','POST'])
 def getFrame(frame_number):
     ds_path = '/data/Nathan/2photon/rewardRemapping/nd125/02112015/day1-session-003/day1-session-003.sima'
