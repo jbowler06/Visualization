@@ -194,7 +194,7 @@
     <script type="text/javascript" 
         src="{{ url_for('static', filename='scripts/glMatrix-0.9.5.min.js') }}"></script>
     <script type="text/javascript" 
-        src="{{ url_for('static', filename='scripts/Queue.js') }}"></script>
+        src="{{ url_for('static', filename='scripts/frame_buffer.js') }}"></script>
     <script type="text/javascript" 
         src="{{ url_for('static', filename='scripts/webgl_helpers.js') }}"></script>
 
@@ -227,6 +227,7 @@
         var zProjection
         var xProjection
         var yProjection
+        var g_frameBuffer
         var g_filePath
         var g_requestStartFrame
         var g_frameDelta = 1
@@ -236,8 +237,7 @@
         var g_sequenceInfo = {}
         g_sequenceInfo.max = 1
 
-        var g_frameBuffer = {}
-        g_frameBuffer.buffer = {}
+        /*g_frameBuffer.buffer = {}
         g_frameBuffer.frameDelta = 1
         g_frameBuffer.length = function() { return Object.keys(this.buffer).length }
         g_frameBuffer.maxLength = 350
@@ -256,7 +256,7 @@
             }
             var sorted = Object.keys(this.buffer).sort(function(a,b){return b-a})
             return sorted[0]
-        }
+        }*/
 
         function initShaders() {
             var shaderProgram
@@ -562,6 +562,7 @@
         }
 
         function setSelectedData(newFrameIndex) {
+            g_frameBuffer = new FrameBuffer(350, 1)
             g_filePath = $('#file_input').val()
             if (g_filePath) {
                 $('#buffering_warning').text('buffering.. please wait')

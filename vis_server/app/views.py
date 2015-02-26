@@ -38,8 +38,11 @@ def index():
 @app.route('/getInfo', methods=['GET','POST'])
 def getInfo():
     ds_path = request.form.get('path')
-    ds = ImagingDataset.load(ds_path)
-    seq = ds.__iter__().next()
+    if (os.path.splitext(ds_path)[-1] == '.sima'):
+        ds = ImagingDataset.load(ds_path)
+        seq = ds.__iter__().next()
+    else:
+        seq = Sequence.create('HDF5',ds_path,'tzyxc')
 
     return jsonify(max=len(seq))
 
