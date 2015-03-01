@@ -44,7 +44,16 @@ def getInfo():
     else:
         seq = Sequence.create('HDF5',ds_path,'tzyxc')
 
-    return jsonify(max=len(seq))
+    length = len(seq)
+    frames = []
+    for frame_index in [0,int(length/2),-1]:
+        frame = seq._get_frame(frame_index)
+        frames += [np.percentile(frame[np.where(np.logical_not(np.isnan(frame)))],95)]
+
+    normalizingVal = np.nanmean(frames)
+
+    return jsonify(max=length, normalizingValue=int(normalizingVal), 
+                   height=seq.shape[2],width=seq.shape[3])
 
 @app.route('/getFrame/<frame_number>', methods=['GET','POST'])
 def getFrame(frame_number):

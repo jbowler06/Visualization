@@ -4,12 +4,21 @@ function FrameBuffer(maxLength, frameDelta) {
     this.current = -1
     this.buffer = {}
 
-
     this.length = function() { 
         return Object.keys(this.buffer).length 
     }
 
+    this.set_next = function(nextValue) {
+        this.forcedNext = nextValue
+    }
+
     this.next = function() { 
+        if (this.forcedNext) {
+            var value = this.forcedNext
+            delete this.forcedNext
+            return value
+        }
+
         return this.current + this.frameDelta 
     }
 

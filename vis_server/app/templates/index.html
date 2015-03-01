@@ -77,6 +77,21 @@
         .button.halfButton {
             width: 35px;
         }
+        .slim {
+            height: 20px !important;
+            padding: 2px !important;
+            width: 61px !important;
+        }
+        .slim span {
+            height 5px; !important
+        }
+        .indicator {
+            height: 20px;
+            width: 20px;
+            background-color: #007500;
+            border-radius: 50%;
+            display: none;
+        }
         .controls {
             display: block;
             position: absolute;
@@ -166,7 +181,7 @@
                     <tr>
                         <td>normalizing constant:</td>
                         <td><input type="text" id="norming_value_input" class="textInput floatLeft"></td>
-                        <td>frames</td>
+                        <td></td>
                     </tr>
                 </table>
                 <div class="button smallButton floatRight" id="options_cancel"><span>ok</span></div>
@@ -179,9 +194,14 @@
             </span>
         </div>
         <div class="smallLabel" id="step_size_label"><span>step size: <span id="step_size_span">1</span></span></div>
+        <div><input type="range" name="frame_slider" id="frame_slider" min="0" max="100" value="0"></div>
         <div>
-        <div class="button halfButton floatLeft" id="reduce_step_button"><span>&#60;&#60;</span></div>
-        <div class="button halfButton floatLeft" id="increase_step_button"><span>&#62;&#62;</span></div>
+            <div class="button halfButton floatLeft" id="single_reverse_button"><span>&#60;</span></div>
+            <div class="button halfButton floatLeft" id="single_step_button"><span>&#62;</span></div>
+        </div>
+        <div>
+            <div class="button halfButton floatLeft slim" id="reduce_step_button"><span>&#60;&#60;</span></div>
+            <div class="button halfButton floatLeft slim" id="increase_step_button"><span>&#62;&#62;</span></div>
         </div>
         <div class="warningBox" id="buffering_warning"><span></span></div>
         <div> 
@@ -189,6 +209,7 @@
             <p>max:<span id="buff_max"></span>
             <p>curr:<span id="buff_curr"></span>
         </div>
+        <div class="indicator floatLeft" id="indicator"><span>&nbsp;</span></div>
     </div>
     <div class="canvasContainer">
         <canvas id="gl_canvas" width="800" height="700"></canvas>
@@ -391,12 +412,13 @@
             play = false
         })
         
-        function playFramesFromQueue() {
+        function playFramesFromQueue(forceStep) {
             $('#buff_min').text(g_frameBuffer.min())
             $('#buff_max').text(g_frameBuffer.max())
             var nextFrame = g_frameBuffer.next()
-            if (g_frameBuffer.buffer.hasOwnProperty(nextFrame) && play) {
+            if (g_frameBuffer.buffer.hasOwnProperty(nextFrame) && (play || forceStep)) {
                 $('#buff_curr').text(nextFrame)
+                $('#frame_slider').val(nextFrame)
                 g_frameBuffer.current = nextFrame
                 var thisFrame = g_frameBuffer.buffer[nextFrame]
                 xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
@@ -449,6 +471,8 @@
                         },
                         cache: false,
                     }).done(function(response) {
+                        $('#indicator').show()
+                        $('#indicator').fadeOut(1000)
                         if (response.hasOwnProperty('frame_'+g_frameBuffer.next())) {
                             $('#buffering_warning').text('buffering... press start to resume playback')
                         }
@@ -460,7 +484,6 @@
                                 index = name[1]
                                 response[frame].index = index
                                 g_frameBuffer.buffer[index] = response[frame]
-                                frameIndex++
                             }
                         }
 
@@ -531,6 +554,20 @@
             play = false
         })
 
+        function resizeBuffers(x,y,z) {
+           depth = 0.5
+           if (x < y) {
+                height = 2.0
+                width = 2.0*x/y
+           } else {
+                height = 2.0*y/x
+                width = 2.0
+           }
+
+           zProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,height)
+           xProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,depth,height)
+           yProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,depth)
+        }
         
         function fetchInfo(filePath) {
             $.ajax({
@@ -541,8 +578,15 @@
                 },
                     cache: false,
                 }).done(function(response) {
+                    $('#indicator').show()
+                    $('#indicator').fadeOut(1000)
                     g_sequenceInfo=response,
                     $('#frame_num_label').text(g_sequenceInfo.max)  
+                    g_normingVal = response.normalizingValue
+                    fetching = true
+                    resizeBuffers(response.width,response.height)
+                    $('#frame_slider').attr('max',g_sequenceInfo.max)
+                    fetchFrames()
                 })
         }
 
@@ -551,9 +595,6 @@
             g_filePath = $('#file_input').val()
             if (g_filePath) {
                 $('#buffering_warning').text('buffering.. please wait')
-                fetching = true
-                fetchFrames()
-
                 fetchInfo()
             }
             $('#buff_min').text(g_frameBuffer.min())
@@ -616,14 +657,16 @@
             $('#options_button').removeClass('selected')
             g_frameRate = 1000/$('#frame_rate_input').val()
             g_packetSize = parseInt($('#packet_size_input').val(),10)
-            g_frameBuffer.maxLength = parseInt($('#buffer_size_input').val(),10)
-            var normingVal = $('#norming_value_input').val()
-            if (normingVal != g_normingVal) {
-                g_frameBuffer.buffer = {}
-                g_normingVal = normingVal
-                if (!fetching) {
-                    fetching = true
-                    fetchFrames()
+            if (g_frameBuffer) {
+                g_frameBuffer.maxLength = parseInt($('#buffer_size_input').val(),10)
+                var normingVal = $('#norming_value_input').val()
+                if (normingVal != g_normingVal) {
+                    g_frameBuffer.buffer = {}
+                    g_normingVal = normingVal
+                    if (!fetching) {
+                        fetching = true
+                        fetchFrames()
+                    }
                 }
             }
         })
@@ -672,6 +715,26 @@
                 fetching = true
                 fetchFrames()
             }
+        })
+
+        $('#single_step_button').click(function(){
+            var frameDelta = g_frameBuffer.frameDelta
+            g_frameBuffer.frameDelta = Math.abs(frameDelta)
+            playFramesFromQueue(true)
+            g_frameBuffer.frameDelta = frameDelta
+        })
+
+        $('#single_reverse_button').click(function(){
+            var frameDelta = g_frameBuffer.frameDelta
+            g_frameBuffer.frameDelta = -Math.abs(frameDelta)
+            playFramesFromQueue(true)
+            g_frameBuffer.frameDelta = frameDelta
+        })
+        
+
+        $('#frame_slider').change('dragstop',function() {
+            g_frameBuffer.set_next($('#frame_slider').val())
+            g_frameBuffer.current = $('#frame_slider').val()-g_frameBuffer.frameDelta
         })
 
     </script>
