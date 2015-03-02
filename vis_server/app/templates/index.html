@@ -59,6 +59,10 @@
             width: 100px;
             height: 20px;
             border: thin solid #0F0;
+
+            -webkit-user-select: none; /* Chrome/Safari */        
+            -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* IE10+ */
         }
         .button span {
             text-height:20px;
@@ -135,6 +139,10 @@
         }
         .width100 {
             width: 100%;
+        }
+        
+        .slider {
+            background-image: -webkit-gradient(linear,left top,right top,color-stop(0, blue),color-stop(' + value + ', red)
         }
     </style>
 
@@ -230,7 +238,10 @@
         varying vec2 vTextureCoord;
         uniform sampler2D uSampler;
         void main(void) {
-            gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+            vec4 myTex = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+            if (myTex.r > 0.5)
+                myTex = myTex + vec4(0.0,1.0,0.0,1.0);
+            gl_FragColor = myTex;
         }
     </script>
 
@@ -595,6 +606,9 @@
             g_filePath = $('#file_input').val()
             if (g_filePath) {
                 $('#buffering_warning').text('buffering.. please wait')
+                //var value = ($('#range').val() - item.min)/(item.max - item.min)
+                var value = 50
+                $('#frame_slider').css('background-image','-moz-linear-gradient(right, red, blue)')
                 fetchInfo()
             }
             $('#buff_min').text(g_frameBuffer.min())
