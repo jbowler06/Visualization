@@ -55,6 +55,20 @@ def getInfo():
     return jsonify(max=length, normalizingValue=int(normalizingVal), 
                    height=seq.shape[2],width=seq.shape[3])
 
+@app.route('/getChannels/<directory>')
+def getChannels(directory):
+    ds_path = directory.replace(':!','/')
+
+    if (os.path.splitext(ds_path)[-1] == '.sima'):
+        ds = ImagingDataset.load(ds_path)
+        channels = ds.channel_names
+    else:
+        seq = Sequence.create('HDF5',ds_path,'tzyxc')
+        channels = ['channel_' + str(idx) for idx in range(seq.shape[4])]
+
+    return render_template('select_list.html',options=channels) 
+
+
 @app.route('/getFrame/<frame_number>', methods=['GET','POST'])
 def getFrame(frame_number):
     ds_path = '/data/Nathan/2photon/rewardRemapping/nd125/02112015/day1-session-003/day1-session-003.sima'
@@ -96,12 +110,15 @@ def getFrames():
     step = request.form.get('frameDelta', type=int)
     num_frames = request.form.get('numFrames', type=int)
     norming_val = request.form.get('normingVal', type=int)/255
-    channel = 0
+    channel = request.form.get('channel')
     if (os.path.splitext(ds_path)[-1] == '.sima'):
         ds = ImagingDataset.load(ds_path)
         seq = ds.__iter__().next()
+        channel = ds._resolve_channel(channel)
     else:
         seq = Sequence.create('HDF5',ds_path,'tzyxc')
+        channel = int(channel.split('_')[-1])
+
     frames = {}
     end = False
     start_frame = int(start_frame)

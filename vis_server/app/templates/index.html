@@ -52,6 +52,10 @@
             font-size: 18px;
             color: #0F0;
         }
+        .channelSelectContainer {
+            padding: 15px;
+            width: 100px;
+        }
         .button {
             text-align:center;
             color: #0F0;
@@ -166,6 +170,10 @@
                 <select id="file_select"></select>
                 <div class="button smallButton floatLeft" id="file_up_level"><span>..</span></div>
             </p>
+            <p style="width:auto;margin:0px 5px">
+                <select class="floatLeft" id="channel_select"></select>
+                <div class="button smallButton floatLeft" id="load_dataset_button"><span>ok</span></div>
+            </p>
          </div>
          <div class="button" id="options_button"><span>options</span></div>
          <div class="loadBox hidden" id="options_box">
@@ -198,11 +206,15 @@
         <div class="button" id="start_button"><span>start</span></div>
         <div class="button" id="stop_button"><span>stop</span></div>
         <div class="largeLabel" id="frame_number_label">
-            <span><span id="this_frame_label">0</span>/<span id="frame_num_label">0</span>
+            <span>
+                <span id="this_frame_label">0</span>/<span id="frame_num_label">0</span>
             </span>
         </div>
         <div class="smallLabel" id="step_size_label"><span>step size: <span id="step_size_span">1</span></span></div>
+       
+
         <div><input type="range" name="frame_slider" id="frame_slider" min="0" max="100" value="0"></div>
+        
         <div>
             <div class="button halfButton floatLeft" id="single_reverse_button"><span>&#60;</span></div>
             <div class="button halfButton floatLeft" id="single_step_button"><span>&#62;</span></div>
@@ -239,8 +251,8 @@
         uniform sampler2D uSampler;
         void main(void) {
             vec4 myTex = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-            if (myTex.r > 0.5)
-                myTex = myTex + vec4(0.0,1.0,0.0,1.0);
+            //if (myTex.r > 0.5)
+            //    myTex = myTex + vec4(0.0,1.0,0.0,1.0);
             gl_FragColor = myTex;
         }
     </script>
@@ -274,6 +286,7 @@
 
         var g_sequenceInfo = {}
         g_sequenceInfo.max = 1
+        var g_channel
 
         function initShaders() {
             var shaderProgram
@@ -478,7 +491,8 @@
                             numFrames: g_packetSize,
                             path: g_filePath,
                             frameDelta: delta,
-                            normingVal: g_normingVal
+                            normingVal: g_normingVal,
+                            channel: g_channel
                         },
                         cache: false,
                     }).done(function(response) {
@@ -607,8 +621,8 @@
             if (g_filePath) {
                 $('#buffering_warning').text('buffering.. please wait')
                 //var value = ($('#range').val() - item.min)/(item.max - item.min)
-                var value = 50
-                $('#frame_slider').css('background-image','-moz-linear-gradient(right, red, blue)')
+                //var value = 50
+                //$('#frame_slider').css('background-image','-moz-linear-gradient(right, red, blue)')
                 fetchInfo()
             }
             $('#buff_min').text(g_frameBuffer.min())
@@ -630,9 +644,15 @@
             }
 
             if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
-                $('#load_box').addClass('hidden')
-                $('#load_button').removeClass('selected')
-                setSelectedData()
+                //$('#load_box').addClass('hidden')
+                //$('#load_button').removeClass('selected')
+                //setSelectedData()
+                $('#channel_select').prop('disabled',true)
+                $.get('/getChannels/'+fullPath.replace(/\//g , ":!"),function(html) {
+                    $('#channel_select').html('')
+                    $('#channel_select').html(html)
+                    $('#channel_select').prop('disabled', false);
+                })
             } else {
                 $('#file_select').prop('disabled', true);
                 $.get('/getFolders/'+fullPath.replace(/\//g , ":!"),function(html) {
@@ -642,6 +662,16 @@
                 })
             }
         }
+
+        $('#load_dataset_button').click(function() {
+            var fullPath = $('#file_input').val()
+            if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
+                g_channel = $('#channel_select').val()
+                $('#load_box').addClass('hidden')
+                $('#load_button').removeClass('selected')
+                setSelectedData()
+            }
+        })
 
         $('#file_select').change(function() {
             fileSelection($('#file_select').val())
