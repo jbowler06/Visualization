@@ -48,7 +48,8 @@ def getInfo():
     frames = []
     for frame_index in [0,int(length/2),-1]:
         frame = seq._get_frame(frame_index)
-        frames += [np.percentile(frame[np.where(np.logical_not(np.isnan(frame)))],95)]
+        if len(frame[np.where(np.logical_not(np.isnan(frame)))]) > 0:
+            frames += [np.percentile(frame[np.where(np.logical_not(np.isnan(frame)))],95)]
 
     normalizingVal = np.nanmean(frames)
 
@@ -106,9 +107,8 @@ def getFrame(frame_number):
 @app.route('/getFrames', methods=['GET','POST'])
 def getFrames():
     ds_path = request.form.get('path')
-    start_frame = request.form.get('startFrame')
     step = request.form.get('frameDelta', type=int)
-    num_frames = request.form.get('numFrames', type=int)
+    requestFrames = request.form.get('frames').split(',')
     norming_val = request.form.get('normingVal', type=int)/255
     channel = request.form.get('channel')
     if (os.path.splitext(ds_path)[-1] == '.sima'):
@@ -119,14 +119,14 @@ def getFrames():
         seq = Sequence.create('HDF5',ds_path,'tzyxc')
         channel = int(channel.split('_')[-1])
 
-    frames = {}
     end = False
-    start_frame = int(start_frame)
-    if (start_frame+num_frames > len(seq)):
-        num_frames = len(seq)-start_frame
-        end = True
+    frames = {}
+    for frame_number in requestFrames:
+        frame_number = int(frame_number)
+        if frame_number > len(seq)-1 or frame_number < 0:
+            end = True
+            continue
 
-    for frame_number in xrange(start_frame, start_frame+num_frames*step, step):
         vol = seq._get_frame(frame_number)
         vol /= norming_val
         vol = np.clip(vol, 0, 255)

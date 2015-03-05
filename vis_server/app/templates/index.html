@@ -114,6 +114,9 @@
             border: thin solid #0F0;
             padding: 10px 40px;
         }
+        .frame_slider {
+            margin: 0px;
+        }
         .hidden {
             display: None;
         }
@@ -212,7 +215,6 @@
         </div>
         <div class="smallLabel" id="step_size_label"><span>step size: <span id="step_size_span">1</span></span></div>
        
-
         <div><input type="range" name="frame_slider" id="frame_slider" min="0" max="100" value="0"></div>
         
         <div>
@@ -437,27 +439,32 @@
         })
         
         function playFramesFromQueue(forceStep) {
-            $('#buff_min').text(g_frameBuffer.min())
-            $('#buff_max').text(g_frameBuffer.max())
+            var min = g_frameBuffer.keys[0]
+            var max = g_frameBuffer.maxSortedIndex
+            $('#buff_min').text(g_frameBuffer.keys[0])
+            $('#buff_max').text(g_frameBuffer.maxSortedIndex)
             var nextFrame = g_frameBuffer.next()
-            if (g_frameBuffer.buffer.hasOwnProperty(nextFrame) && (play || forceStep)) {
-                $('#buff_curr').text(nextFrame)
-                $('#frame_slider').val(nextFrame)
-                g_frameBuffer.current = nextFrame
-                var thisFrame = g_frameBuffer.buffer[nextFrame]
-                xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
-                yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
-                image.src = 'data:image/jpeg;base64,'+thisFrame.z
-                $('#this_frame_label').text(parseInt(thisFrame.index)+1)
-                setTimeout(function(){playFramesFromQueue()}, g_frameRate)
+            if (g_frameBuffer.has_next()) {
+                if (play || forceStep) {
+                    $('#buff_curr').text(nextFrame)
+                    var thisFrame = g_frameBuffer.popFrame(nextFrame)
+                    if(!$('#frame_slider').hasClass('moving')) {
+                        $('#frame_slider').val(nextFrame)
+                    }
+                    if (!thisFrame) debugger;
+                    xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
+                    yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
+                    image.src = 'data:image/jpeg;base64,'+thisFrame.z
+                    $('#this_frame_label').text(parseInt(nextFrame)+1)
+                    setTimeout(function(){playFramesFromQueue()}, g_frameRate)
 
-                if (!fetching && g_frameBuffer.max()-nextFrame <g_frameBuffer.maxLength) {
-                    fetching = true
-                    $('#buffering_warning').text('')
-                    fetchFrames()
+                    if (!fetching && !g_frameBuffer.isFull()) {
+                        fetching = true
+                        $('#buffering_warning').text('')
+                        fetchFrames()
+                    }
                 }
-
-            } else if (!g_frameBuffer.buffer.hasOwnProperty(nextFrame)) {
+            } else {
                 $('#buffering_warning').text('buffering... please wait')
                 play = false
                 if (!fetching) {
@@ -470,27 +477,15 @@
         var fetching = true
         function fetchFrames() {
             if (fetching) {
-                var delta = g_frameBuffer.frameDelta
-                var frameIndex = g_frameBuffer.current
-
-                while (g_frameBuffer.buffer.hasOwnProperty(frameIndex)) {
-                    frameIndex += delta
-                }
-                if (delta < 0) {
-                    delta = Math.min(Math.max(delta,-frameIndex),0)
-                } else {
-                    delta = Math.max(Math.min(delta,g_sequenceInfo.max),0)
-                }
-
-                if ((delta != 0)&&(Math.abs(frameIndex - g_frameBuffer.current)*4/3 <= Math.abs(g_frameBuffer.maxLength*delta))) {
+                if (!g_frameBuffer.isFull()) {
+                    var frames = g_frameBuffer.next_request(g_packetSize)
                     $.ajax({
                     url: '/getFrames',
                         type: 'POST',
                         data: {
-                            startFrame: frameIndex,
-                            numFrames: g_packetSize,
+                            frames: frames.join(','),
                             path: g_filePath,
-                            frameDelta: delta,
+                            frameDelta: g_frameBuffer.frameDelta,
                             normingVal: g_normingVal,
                             channel: g_channel
                         },
@@ -498,6 +493,7 @@
                     }).done(function(response) {
                         $('#indicator').show()
                         $('#indicator').fadeOut(1000)
+
                         if (response.hasOwnProperty('frame_'+g_frameBuffer.next())) {
                             $('#buffering_warning').text('buffering... press start to resume playback')
                         }
@@ -508,26 +504,17 @@
                             if (name[0] == 'frame') {
                                 index = name[1]
                                 response[frame].index = index
-                                g_frameBuffer.buffer[index] = response[frame]
+                                g_frameBuffer.addFrame(index,response[frame])
                             }
                         }
 
-                        $('#buff_min').text(g_frameBuffer.min())
-                        $('#buff_max').text(g_frameBuffer.max())
+                        $('#buff_min').text(g_frameBuffer.keys[0])
+                        $('#buff_max').text(g_frameBuffer.maxSortedIndex)
                         $('#buff_curr').text(g_frameBuffer.current)
                         if (response.end != true) {
                             fetchFrames() 
                         } else {
                             fetching = false
-                        }
-
-                        var minFrame = g_frameBuffer.min()
-                        var maxFrame = g_frameBuffer.max()
-                        while ((g_frameBuffer.length() > g_frameBuffer.maxLength)&&(g_frameBuffer.frameDelta > 0)) {
-                            delete g_frameBuffer.buffer[g_frameBuffer.min()]
-                        }
-                        while ((g_frameBuffer.length() > g_frameBuffer.maxLength)&&(g_frameBuffer.frameDelta < 0)) {
-                            delete g_frameBuffer.buffer[g_frameBuffer.max()]
                         }
                     })
                 } else {
@@ -537,7 +524,7 @@
                     } else {
                         $('#buffering_warning').text('press start to resume playback')
                     }
-                 }
+                }
              }
         }
 
@@ -616,7 +603,7 @@
         }
 
         function setSelectedData(newFrameIndex) {
-            g_frameBuffer = new FrameBuffer(350, 1)
+            g_frameBuffer = new FrameBuffer(350)
             g_filePath = $('#file_input').val()
             if (g_filePath) {
                 $('#buffering_warning').text('buffering.. please wait')
@@ -625,8 +612,8 @@
                 //$('#frame_slider').css('background-image','-moz-linear-gradient(right, red, blue)')
                 fetchInfo()
             }
-            $('#buff_min').text(g_frameBuffer.min())
-            $('#buff_max').text(g_frameBuffer.max())
+            $('#buff_min').text(g_frameBuffer.keys[0])
+            $('#buff_max').text(g_frameBuffer.maxSortedIndex)
             $('#buff_curr').text(g_frameBuffer.current)
         }
 
@@ -705,7 +692,6 @@
                 g_frameBuffer.maxLength = parseInt($('#buffer_size_input').val(),10)
                 var normingVal = $('#norming_value_input').val()
                 if (normingVal != g_normingVal) {
-                    g_frameBuffer.buffer = {}
                     g_normingVal = normingVal
                     if (!fetching) {
                         fetching = true
@@ -730,11 +716,11 @@
 
         $('#increase_step_button').click(function() {
             if (g_frameBuffer.frameDelta > 0) {
-                g_frameBuffer.frameDelta *= 2
+                g_frameBuffer.set_frameDelta(g_frameBuffer.frameDelta*2)
             } else if (g_frameBuffer.frameDelta == -1) {
-                g_frameBuffer.frameDelta *= -1
+                g_frameBuffer.set_frameDelta(g_frameBuffer.frameDelta*-1)
             } else {
-                g_frameBuffer.frameDelta /= 2
+                g_frameBuffer.set_frameDelta(g_frameBuffer.frameDelta / 2)
             }
             $('#step_size_span').text(g_frameBuffer.frameDelta)
 
@@ -747,11 +733,11 @@
 
         $('#reduce_step_button').click(function() {
             if (g_frameBuffer.frameDelta < 0) {
-                g_frameBuffer.frameDelta *= 2
+                g_frameBuffer.set_frameDelta(g_frameBuffer.frameDelta * 2)
             } else if (g_frameBuffer.frameDelta == 1) {
-                g_frameBuffer.frameDelta *= -1
+                g_frameBuffer.set_frameDelta(g_frameBuffer.frameDelta * -1)
             } else {
-                g_frameBuffer.frameDelta /= 2
+                g_frameBuffer.set_frameDelta(g_frameBuffer.frameDelta / 2)
             }
             $('#step_size_span').text(g_frameBuffer.frameDelta)
 
@@ -763,22 +749,25 @@
 
         $('#single_step_button').click(function(){
             var frameDelta = g_frameBuffer.frameDelta
-            g_frameBuffer.frameDelta = Math.abs(frameDelta)
+            g_frameBuffer.set_frameDelta(Math.abs(g_frameBuffer.frameDelta))
             playFramesFromQueue(true)
-            g_frameBuffer.frameDelta = frameDelta
+            g_frameBuffer.set_frameDelta(frameDelta)
         })
 
         $('#single_reverse_button').click(function(){
             var frameDelta = g_frameBuffer.frameDelta
-            g_frameBuffer.frameDelta = -Math.abs(frameDelta)
+            g_frameBuffer.set_frameDelta(-Math.abs(g_frameBuffer.frameDelta))
             playFramesFromQueue(true)
-            g_frameBuffer.frameDelta = frameDelta
+            g_frameBuffer.set_frameDelta(frameDelta)
         })
         
+        $('#frame_slider').mousedown(function() {
+            $(this).addClass('moving')
+        })
 
-        $('#frame_slider').change('dragstop',function() {
+        $('#frame_slider').mouseup(function() {
+            $(this).removeClass('moving')
             g_frameBuffer.set_next($('#frame_slider').val())
-            g_frameBuffer.current = $('#frame_slider').val()-g_frameBuffer.frameDelta
         })
 
     </script>
