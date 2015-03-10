@@ -61,7 +61,7 @@ def getInfo():
         for channel,key in enumerate(norm_factors.keys()):
             subframe = frame[:,:,:,channel]
             if len(subframe[np.where(np.logical_not(np.isnan(subframe)))]) > 0:
-                norm_factors[key] += [np.percentile(subframe[np.where(np.logical_not(np.isnan(subframe)))],95)]
+                norm_factors[key] += [np.percentile(subframe[np.where(np.logical_not(np.isnan(subframe)))],98)]
 
     json = {
         'height': seq.shape[2],
@@ -69,7 +69,7 @@ def getInfo():
         'max': length
     }
     for channel in norm_factors.keys():
-        json[channel] = np.nanmean(norm_factors[channel])
+        json[channel] = int(np.nanmean(norm_factors[channel]))
 
     return jsonify(**json)
 

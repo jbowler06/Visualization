@@ -38,22 +38,6 @@ function FrameBuffer(sequenceId,maxLength) {
         return this.current + this.frameDelta
     }
 
-    /*
-    this.reorderKeys = function() {
-        if (this.sorting) return;
-        this.sorting = true
-        var current = this.current
-        var delta = this.frameDelta
-        var sortFunc = this.sortKeys
-        var keyFind = this.keyFind
-        this.keys.sort(function(a,b){return sortFunc(a,b,current,delta)}) 
-        this.maxSortedIndex = this.keys.find(function(element,index,array){
-            return keyFind(element,index,array,current,delta)
-        })
-        this.sorting = false
-    }
-    */
-    
     this.sortKeys = function(a,b,current,delta) {
         var a_comp = (a-current)%delta
         var b_comp = (b-current)%delta
@@ -79,7 +63,7 @@ function FrameBuffer(sequenceId,maxLength) {
             }
 
             var endKey = this.keys[this.keys.length-1]
-            if ((currentKey > 2*this.maxLength/3)||(this.maxSortedIndex != endKey)) {
+            if ((currentKey > this.maxLength/2)||(this.maxSortedIndex != endKey)) {
                 return false
             }
         }
@@ -139,6 +123,34 @@ function FrameBuffer(sequenceId,maxLength) {
             }
         }
     }
+
+    this.addFrames = function(frames) {
+        for (frame in frames) {
+            var infoarr = frame.split('_')
+            if (infoarr[0] == 'frame') {
+                frames[frame].index = infoarr[1]
+                this.buffer[infoarr[1]] = frames[frame]
+            }
+        }
+
+        var keys = this.sortKeys()
+        var currentKey = keys.indexOf(""+this.current)
+
+        var len = this.length()
+        while (len > this.maxLength) {
+            if (currentKey > this.maxLength/3) {
+                delete this.buffer[""+keys.shift()]
+                currentKey--
+                len--
+            } else if (this.maxSortedIndex == this.keys[len-1]) {
+                break
+            } else {
+                delete this.buffer[""+this.keys.pop()]
+                len--
+            }
+        }
+    }
+
 
     this.popFrame = function(index) {
         if (!this.buffer[index]) {

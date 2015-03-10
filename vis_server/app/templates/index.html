@@ -526,17 +526,9 @@
                         if (response.hasOwnProperty('frame_'+g_frameBuffer.next())) {
                             $('#buffering_warning').text('buffering... press start to resume playback')
                         }
-                        var index
-                        var name
-                        for (var frame in response) {
-                            name = frame.split('_')
-                            if (name[0] == 'frame') {
-                                index = name[1]
-                                response[frame].index = index
-                                g_frameBuffer.addFrame(index,response[frame])
-                            }
-                        }
-
+                        
+                        g_frameBuffer.addFrames(response)
+                   
                         $('#buff_min').text(g_frameBuffer.keys[0])
                         $('#buff_max').text(g_frameBuffer.maxSortedIndex)
                         $('#buff_curr').text(g_frameBuffer.current)
@@ -720,6 +712,8 @@
         $('#load_button').click(function(){
             $('#load_button').addClass('selected')
             $('#load_box').removeClass('hidden')
+            $('#ch1_norm_input').val(g_normingVal[0])
+            $('#ch2_norm_input').val(g_normingVal[1])
         })
 
         $('#options_button').click(function(){
@@ -729,8 +723,6 @@
             $('#frame_rate_input').val(Math.round(String(1000/g_frameRate)))
             $('#packet_size_input').val(g_packetSize)
             $('#buffer_size_input').val(g_frameBuffer.maxLength)
-            $('#ch1_norm_input').val(g_normingVal[0])
-            $('#ch2_norm_input').val(g_normingVal[1])
         })
 
         $('#options_cancel').click(function() {
