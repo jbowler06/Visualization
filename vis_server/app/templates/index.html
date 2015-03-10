@@ -52,10 +52,6 @@
             font-size: 18px;
             color: #0F0;
         }
-        .channelSelectContainer {
-            padding: 15px;
-            width: 100px;
-        }
         .button {
             text-align:center;
             color: #0F0;
@@ -144,6 +140,11 @@
         .loadBox table input{
             width: 75px;
         }
+        input.norming_value_input{
+            width: 75px;
+            line-height: 1;
+            margin-left: 10px;
+        }
         .width100 {
             width: 100%;
         }
@@ -173,10 +174,17 @@
                 <select id="file_select"></select>
                 <div class="button smallButton floatLeft" id="file_up_level"><span>..</span></div>
             </p>
+            <div>
+                <p><span class="floatLeft" >normalizing constants:</span>
+                    <input type="text" class="norming_value_input floatLeft" id="ch1_norm_input">
+                    <input type="text" class="norming_value_input floatLeft" id="ch2_norm_input">
+                </p>
+            </div>
             <p style="width:auto;margin:0px 5px">
                 <select class="floatLeft" id="channel_select"></select>
                 <div class="button smallButton floatLeft" id="load_dataset_button"><span>ok</span></div>
             </p>
+
          </div>
          <div class="button" id="options_button"><span>options</span></div>
          <div class="loadBox hidden" id="options_box">
@@ -196,11 +204,6 @@
                         <td>buffer size:</td>
                         <td><input type="text" id="buffer_size_input" class="textInput floatLeft"></td>
                         <td>frames</td>
-                    </tr>
-                    <tr>
-                        <td>normalizing constant:</td>
-                        <td><input type="text" id="norming_value_input" class="textInput floatLeft"></td>
-                        <td></td>
                     </tr>
                 </table>
                 <div class="button smallButton floatRight" id="options_cancel"><span>ok</span></div>
@@ -251,11 +254,21 @@
 
         varying vec2 vTextureCoord;
         uniform sampler2D uSampler;
+        uniform int num_channels;
+        
         void main(void) {
-            vec4 myTex = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-            //if (myTex.r > 0.5)
-            //    myTex = myTex + vec4(0.0,1.0,0.0,1.0);
-            gl_FragColor = myTex;
+            if (num_channels == 1) {
+                vec4 myTex = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+                gl_FragColor = myTex;
+            } else {
+                vec4 channel1 = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + 0.5));
+                vec4 channel2 = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+                if (vTextureCoord.t < 0.5) {
+                    gl_FragColor = vec4(channel1.s,channel2.s,0.0,0.0);
+                } else {
+                    gl_FragColor = vec4(0.0,0.0,0.0,0.0);
+                }
+            }
         }
     </script>
 
@@ -284,7 +297,7 @@
         var g_frameDelta = 1
         var g_frameRate = 166.66
         var g_packetSize = 8
-        var g_normingVal = 2194
+        var g_normingVal = {'0':0,'1':0}
 
         var g_sequenceInfo = {}
         g_sequenceInfo.max = 1
@@ -314,6 +327,8 @@
             shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix")
             shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix")
             shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler")
+
+            shaderProgram.channelsUniform = gl.getUniformLocation(shaderProgram, "num_channels")
             
             return shaderProgram
         }
@@ -339,6 +354,7 @@
 
         var image = new Image()
         function getNextFrame(response) {
+            //TODO: remove image add to zProjection.texture
             image.src = 'data:image/jpeg;base64,'+response.z_projection
             xProjection.texture.image.src = 'data:image/jpeg;base64,'+response.x_projection
             yProjection.texture.image.src = 'data:image/jpeg;base64,'+response.y_projection
@@ -347,6 +363,13 @@
         function drawScene() {
             gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+            var num_channels = 1
+            if ($('#channel_select').val() == 'overlay') {
+                num_channels = 2
+            }
+            gl.uniform1i(zProjection.shaderProgram.channelsUniform, num_channels)
+            gl.uniform1i(xProjection.shaderProgram.channelsUniform, num_channels)
+            gl.uniform1i(yProjection.shaderProgram.channelsUniform, num_channels)
 
             mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix)
 
@@ -399,6 +422,7 @@
             
             setMatrixUniforms()
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
+            
         }
 
         var play
@@ -487,10 +511,15 @@
                             path: g_filePath,
                             frameDelta: g_frameBuffer.frameDelta,
                             normingVal: g_normingVal,
-                            channel: g_channel
+                            channel: g_channel,
+                            sequenceId: g_frameBuffer.sequenceId
                         },
                         cache: false,
                     }).done(function(response) {
+                        if (response.sequenceId != g_frameBuffer.sequenceId) {
+                            return;
+                        }
+
                         $('#indicator').show()
                         $('#indicator').fadeOut(1000)
 
@@ -586,7 +615,7 @@
                 url: '/getInfo',
                 type: 'POST',
                 data: {
-                    path: g_filePath,
+                    path: filePath,
                 },
                     cache: false,
                 }).done(function(response) {
@@ -594,27 +623,49 @@
                     $('#indicator').fadeOut(1000)
                     g_sequenceInfo=response,
                     $('#frame_num_label').text(g_sequenceInfo.max)  
-                    g_normingVal = response.normalizingValue
+
+                    if (response['channel_0']) {
+                        $('#ch1_norm_input').val(response['channel_0'])
+                    }
+
+                    if (response['channel_1']) {
+                        $('#ch2_norm_input').val(response['channel_1'])
+                    }
+
                     fetching = true
                     resizeBuffers(response.width,response.height)
                     $('#frame_slider').attr('max',g_sequenceInfo.max)
-                    fetchFrames()
                 })
         }
 
         function setSelectedData(newFrameIndex) {
-            g_frameBuffer = new FrameBuffer(350)
+            if (g_frameBuffer) {
+                g_frameBuffer.buffer = []
+            }
+            g_frameBuffer = new FrameBuffer(Date.now(),350)
             g_filePath = $('#file_input').val()
+            g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
+            if (!g_normingVal) {
+                alert('normalizing value unset')
+            }
             if (g_filePath) {
                 $('#buffering_warning').text('buffering.. please wait')
-                //var value = ($('#range').val() - item.min)/(item.max - item.min)
-                //var value = 50
-                //$('#frame_slider').css('background-image','-moz-linear-gradient(right, red, blue)')
-                fetchInfo()
             }
-            $('#buff_min').text(g_frameBuffer.keys[0])
-            $('#buff_max').text(g_frameBuffer.maxSortedIndex)
+
+            if ($('#channel_select').val() == 'overlay') {
+                zProjection.textureCoordBuffer = createTextureCoordBuffer(2)
+                xProjection.textureCoordBuffer = createTextureCoordBuffer(2)
+                yProjection.textureCoordBuffer = createTextureCoordBuffer(2)
+            } else {
+                zProjection.textureCoordBuffer = createTextureCoordBuffer(1)
+                xProjection.textureCoordBuffer = createTextureCoordBuffer(1)
+                yProjection.textureCoordBuffer = createTextureCoordBuffer(1)
+            }
+
+            //$('#buff_min').text(g_frameBuffer.minKey)
+            //$('#buff_max').text(g_frameBuffer.maxSortedIndex)
             $('#buff_curr').text(g_frameBuffer.current)
+            fetchFrames()
         }
 
         function fileSelection(file) {
@@ -631,10 +682,8 @@
             }
 
             if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
-                //$('#load_box').addClass('hidden')
-                //$('#load_button').removeClass('selected')
-                //setSelectedData()
                 $('#channel_select').prop('disabled',true)
+                fetchInfo(fullPath)
                 $.get('/getChannels/'+fullPath.replace(/\//g , ":!"),function(html) {
                     $('#channel_select').html('')
                     $('#channel_select').html(html)
@@ -680,7 +729,8 @@
             $('#frame_rate_input').val(Math.round(String(1000/g_frameRate)))
             $('#packet_size_input').val(g_packetSize)
             $('#buffer_size_input').val(g_frameBuffer.maxLength)
-            $('#norming_value_input').val(g_normingVal)
+            $('#ch1_norm_input').val(g_normingVal[0])
+            $('#ch2_norm_input').val(g_normingVal[1])
         })
 
         $('#options_cancel').click(function() {
@@ -691,13 +741,7 @@
             if (g_frameBuffer) {
                 g_frameBuffer.maxLength = parseInt($('#buffer_size_input').val(),10)
                 var normingVal = $('#norming_value_input').val()
-                if (normingVal != g_normingVal) {
-                    g_normingVal = normingVal
-                    if (!fetching) {
-                        fetching = true
-                        fetchFrames()
-                    }
-                }
+                
             }
         })
 

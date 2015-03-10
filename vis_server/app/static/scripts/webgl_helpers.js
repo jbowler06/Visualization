@@ -92,19 +92,24 @@ function createSquareVertexPositionBuffer(gl, size_x, size_y) {
 }
 
 
-function textureVerticies() {
+function textureVerticies(num_channels) {
+    var y = 1.0
+    if ((num_channels) && (num_channels == 2)) {
+        y = 0.5
+    }
+    
     return textureCoords = [
-            1.0, 1.0,
-            0.0, 1.0,
+            1.0, y,
+            0.0, y,
             1.0, 0.0,
             0.0, 0.0
         ]
 }
 
-function createTextureCoordBuffer() {
+function createTextureCoordBuffer(num_channels) {
     var textureCoordBuffer = gl.createBuffer()
     gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer)
-    var textureCoords = textureVerticies()
+    var textureCoords = textureVerticies(num_channels)
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoords), gl.STATIC_DRAW)
     textureCoordBuffer.itemSize = 2
     textureCoordBuffer.numItems = 4
