@@ -360,8 +360,11 @@
             yProjection.texture.image.src = 'data:image/jpeg;base64,'+response.y_projection
         }
     
+        //TODO: Remove these global vars
         var zoom = -3.5;
         var offset = {x:0,y:0};
+        var z_height = 2;
+        var z_width = 2;
         function drawScene() {
             gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -369,6 +372,9 @@
             if ($('#channel_select').val() == 'overlay') {
                 num_channels = 2
             }
+
+            var translate_y = z_height/2 + 0.35;
+            var translate_x = z_width/2 + 0.35;
             gl.uniform1i(zProjection.shaderProgram.channelsUniform, num_channels)
             gl.uniform1i(xProjection.shaderProgram.channelsUniform, num_channels)
             gl.uniform1i(yProjection.shaderProgram.channelsUniform, num_channels)
@@ -393,7 +399,7 @@
             setMatrixUniforms()
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, zProjection.vertexPositionBuffer.numItems)
 
-            mat4.translate(mvMatrix, [1.35, 0.0, 0.0])
+            mat4.translate(mvMatrix, [translate_x, 0.0, 0.0])
             gl.bindBuffer(gl.ARRAY_BUFFER, xProjection.vertexPositionBuffer)
             gl.vertexAttribPointer(xProjection.shaderProgram.vertexPositionAttribute, 
                     xProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
@@ -409,7 +415,7 @@
             setMatrixUniforms()
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, xProjection.vertexPositionBuffer.numItems)
 
-            mat4.translate(mvMatrix, [-1.35, -1.35, 0.0])
+            mat4.translate(mvMatrix, [-translate_x, -translate_y, 0.0])
             gl.bindBuffer(gl.ARRAY_BUFFER, yProjection.vertexPositionBuffer)
             gl.vertexAttribPointer(yProjection.shaderProgram.vertexPositionAttribute, 
                     yProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
@@ -635,6 +641,9 @@
                 height = 2.0*y/x
                 width = 2.0
            }
+
+           z_height = height;
+           z_width = width;
 
            zProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,height)
            xProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,depth,height)

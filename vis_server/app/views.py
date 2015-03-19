@@ -133,6 +133,7 @@ def getFrames():
     norming_val = request.form.getlist('normingVal[]', type=float)
     sequenceId = request.form.get('sequenceId')
     channel = request.form.get('channel')
+    quality = 40
     if channel == 'overlay':
         channel = None
 
@@ -164,19 +165,19 @@ def getFrames():
         surf = np.nanmean(vol,axis=0)
         img = Image.fromarray(surf.astype('uint8'),'L')
         img_io_z = StringIO.StringIO()
-        img.save(img_io_z, 'jpeg', quality=40)
+        img.save(img_io_z, 'jpeg', quality=quality)
         img_io_z.seek(0)
 
         surf = np.nanmean(vol,axis=1)
         img = Image.fromarray(surf.astype('uint8'),'L')
         img_io_y = StringIO.StringIO()
-        img.save(img_io_y, 'jpeg', quality=40)
+        img.save(img_io_y, 'jpeg', quality=quality)
         img_io_y.seek(0)
 
         surf = np.nanmean(vol,axis=2).T
         img = Image.fromarray(surf.astype('uint8'),'L')
         img_io_x = StringIO.StringIO()
-        img.save(img_io_x, 'jpeg', quality=40)
+        img.save(img_io_x, 'jpeg', quality=quality)
         img_io_x.seek(0)
         
         frames['frame_'+str(frame_number)] = {
