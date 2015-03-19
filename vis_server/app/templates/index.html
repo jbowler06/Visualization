@@ -360,6 +360,8 @@
             yProjection.texture.image.src = 'data:image/jpeg;base64,'+response.y_projection
         }
     
+        var zoom = -3.5;
+        var offset = {x:0,y:0};
         function drawScene() {
             gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -375,7 +377,7 @@
 
             mat4.identity(mvMatrix)
 
-            mat4.translate(mvMatrix, [-0.25, 0.25, -3.5])
+            mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, zoom])
             gl.bindBuffer(gl.ARRAY_BUFFER, zProjection.vertexPositionBuffer)
             gl.vertexAttribPointer(zProjection.shaderProgram.vertexPositionAttribute, 
                     zProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
@@ -422,11 +424,47 @@
             
             setMatrixUniforms()
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
-            
+
         }
 
+
         var play
+        var mouseState = {}
         $("#gl_canvas").ready(function webGLStart (){
+            $(this).bind('DOMMouseScroll mousewheel', function(event) {
+                if (event.originalEvent.wheelDelta > 0 || event.originalEvent.detail < 0) {
+                    zoom = Math.min(zoom+0.1,-0.1);
+                } else {
+                    zoom -= 0.1;
+                }
+                if (!play) {
+                    drawScene();
+                }
+            });
+
+            $(this).bind('mousedown',function(){
+                mouseState.mouseDown = true;
+            });
+
+            $(this).bind('mouseup',function(){
+                mouseState.mouseDown = false;
+            });
+
+            $(this).mousemove(function(event) {
+                if (mouseState.mouseDown) {
+                    var dx = event.clientX - mouseState.lastMouseX
+                    var dy = event.clientY - mouseState.lastMouseY
+                    offset.x += dx/400
+                    offset.y -= dy/400
+
+                    if (!play) {
+                        drawScene();
+                    }
+                }
+                mouseState.lastMouseX = event.clientX;
+                mouseState.lastMouseY = event.clientY;
+            });
+
             var canvas = document.getElementById("gl_canvas")
             gl = initGL(canvas)
             zProjection = {
