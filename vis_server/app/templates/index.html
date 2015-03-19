@@ -431,7 +431,8 @@
         var play
         var mouseState = {}
         $("#gl_canvas").ready(function webGLStart (){
-            $(this).bind('DOMMouseScroll mousewheel', function(event) {
+            var gl_canvas = $('#gl_canvas')
+            gl_canvas.bind('DOMMouseScroll mousewheel', function(event) {
                 if (event.originalEvent.wheelDelta > 0 || event.originalEvent.detail < 0) {
                     zoom = Math.min(zoom+0.1,-0.1);
                 } else {
@@ -442,15 +443,15 @@
                 }
             });
 
-            $(this).bind('mousedown',function(){
+            gl_canvas.bind('mousedown',function(){
                 mouseState.mouseDown = true;
             });
 
-            $(this).bind('mouseup',function(){
+            gl_canvas.bind('mouseup',function(){
                 mouseState.mouseDown = false;
             });
 
-            $(this).mousemove(function(event) {
+            gl_canvas.mousemove(function(event) {
                 if (mouseState.mouseDown) {
                     var dx = event.clientX - mouseState.lastMouseX
                     var dy = event.clientY - mouseState.lastMouseY
