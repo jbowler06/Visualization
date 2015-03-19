@@ -173,7 +173,7 @@ def getFrames():
         img.save(img_io_y, 'jpeg', quality=40)
         img_io_y.seek(0)
 
-        surf = np.fliplr(np.nanmean(vol,axis=2).T)
+        surf = np.nanmean(vol,axis=2).T
         img = Image.fromarray(surf.astype('uint8'),'L')
         img_io_x = StringIO.StringIO()
         img.save(img_io_x, 'jpeg', quality=40)
