@@ -192,7 +192,7 @@ def getFolders(directory):
     directory = directory.replace(':!','/')
     subfolders = [os.path.basename(fname) for fname in
         glob.glob(os.path.join(directory,'*')) if os.path.isdir(fname) or os.path.splitext(fname)[-1] =='.h5']
-    subfolders = ['']+subfolders
+    subfolders = ['']+sorted(subfolders)
     return render_template('select_list.html',options=subfolders) 
 
 @app.route('/saveImage', methods=['GET','POST'])
