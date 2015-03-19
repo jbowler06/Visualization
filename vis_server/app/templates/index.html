@@ -504,7 +504,7 @@
                 if (!g_frameBuffer.isFull()) {
                     var frames = g_frameBuffer.next_request(g_packetSize)
                     $.ajax({
-                    url: '/getFrames',
+                        url: '{{ url_for('.getFrames', _external=True) }}',
                         type: 'POST',
                         data: {
                             frames: frames.join(','),
@@ -561,7 +561,7 @@
             /*var c = document.getElementById('gl_canvas')
             var p = c.toDataURL()
             $.ajax({
-                url: '/saveImage',
+                url: '{{ url_for('.saveImage', _external=True) }}',
                 type: 'POST',
                 cache: false,
                 data: {
@@ -604,7 +604,7 @@
         
         function fetchInfo(filePath) {
             $.ajax({
-                url: '/getInfo',
+                url: '{{ url_for('.getInfo', _external=True) }}',
                 type: 'POST',
                 data: {
                     path: filePath,
@@ -676,14 +676,14 @@
             if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
                 $('#channel_select').prop('disabled',true)
                 fetchInfo(fullPath)
-                $.get('/getChannels/'+fullPath.replace(/\//g , ":!"),function(html) {
+                $.get('{{ url_for('.getChannels',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
                     $('#channel_select').html('')
                     $('#channel_select').html(html)
                     $('#channel_select').prop('disabled', false);
                 })
             } else {
                 $('#file_select').prop('disabled', true);
-                $.get('/getFolders/'+fullPath.replace(/\//g , ":!"),function(html) {
+                $.get('{{ url_for('.getFolders',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
                     $('#file_select').html('')
                     $('#file_select').html(html)
                     $('#file_select').prop('disabled', false);
