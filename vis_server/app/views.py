@@ -37,7 +37,6 @@ def getSequence(directory):
         seq = ds.__iter__().next()
     else:
         seq = Sequence.create('HDF5',directory,'tzyxc')
-
     return seq
 
 
@@ -187,6 +186,68 @@ def getFrames():
         }
 
     return jsonify(end=end,sequenceId=sequenceId,**frames)
+
+
+@app.route('/getVolume', methods=['GET','POST'])
+def getVolume():
+    ds_path = request.form.get('path')
+    requestFrame = request.form.get('frame', type=int)
+    #requestPlanes = request.form.getlist('planes[]', type=int)
+    norming_val = request.form.getlist('normingVal[]', type=float)
+    sequenceId = request.form.get('sequenceId')
+    channel = request.form.get('channel')
+    quality = 40
+    if channel == 'overlay':
+        channel = None
+
+    if (os.path.splitext(ds_path)[-1] == '.sima'):
+        ds = ImagingDataset.load(ds_path)
+        seq = ds.__iter__().next()
+        channel = ds._resolve_channel(channel)
+    else:
+        seq = Sequence.create('HDF5',ds_path,'tzyxc')
+        if channel:
+            channel = int(channel.split('_')[-1])
+
+    end = False
+    planes = {}
+    for plane in xrange(seq.shape[1]):
+        vol = seq._get_frame(requestFrame)
+        if channel is not None:
+            vol = vol[:,:,:,channel]
+            vol /= (norming_val[channel]/255)
+            vol = np.clip(vol, 0, 255)
+        else:
+            vol = np.hstack((vol[:,:,:,0]/norming_val[0],vol[:,:,:,1]/norming_val[1]))
+            vol*=255
+        surf = vol[plane,:,:]
+        img = Image.fromarray(surf.astype('uint8'),'L')
+        img_io_z = StringIO.StringIO()
+        img.save(img_io_z, 'jpeg', quality=quality)
+        img_io_z.seek(0)
+
+        ysurf = np.zeros((vol.shape[0],vol.shape[2]))
+        ysurf[plane,:]=np.nanmean(surf,axis=0)
+        img = Image.fromarray(ysurf.astype('uint8'),'L')
+        img_io_y = StringIO.StringIO()
+        img.save(img_io_y, 'jpeg', quality=quality)
+        img_io_y.seek(0)
+
+        xsurf = np.zeros((vol.shape[1],vol.shape[0]))
+        xsurf[:,plane]=np.nanmean(surf,axis=1).T
+        img = Image.fromarray(xsurf.astype('uint8'),'L')
+        img_io_x = StringIO.StringIO()
+        img.save(img_io_x, 'jpeg', quality=quality)
+        img_io_x.seek(0)
+        
+        planes['plane_'+str(plane)] = {
+            'z':base64.b64encode(img_io_z.read()),
+            'y':base64.b64encode(img_io_y.read()),
+            'x':base64.b64encode(img_io_x.read())
+        }
+
+    return jsonify(sequenceId=sequenceId,**planes)
+
 
 @app.route('/getFolders/<directory>')
 def getFolders(directory):

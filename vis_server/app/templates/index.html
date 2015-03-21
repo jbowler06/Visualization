@@ -152,6 +152,9 @@
         .slider {
             background-image: -webkit-gradient(linear,left top,right top,color-stop(0, blue),color-stop(' + value + ', red)
         }
+        #volume_button.loading {
+            background-color: #FFA500;
+        }
     </style>
 
     <title>my awesome website</title>
@@ -238,6 +241,7 @@
     </div>
     <div class="canvasContainer">
         <canvas id="gl_canvas" width="800" height="700"></canvas>
+        <div class="button smallButton" id="volume_button" style="position:absolute; top:0px; right:0px;">V</div>
     </div>
 
     <script type="text/javascript" 
@@ -248,6 +252,8 @@
         src="{{ url_for('static', filename='scripts/frame_buffer.js') }}"></script>
     <script type="text/javascript" 
         src="{{ url_for('static', filename='scripts/webgl_helpers.js') }}"></script>
+    <script type="text/javascript" 
+        src="{{ url_for('static', filename='scripts/frame_viewer.js') }}"></script>
 
     <script id="shader-fs" type="x-shader/x-fragment">
         precision mediump float;
@@ -292,16 +298,16 @@
         var xProjection
         var yProjection
         var g_frameBuffer
+        var g_volumeBuffer = [];
         var g_filePath
-        var g_requestStartFrame
         var g_frameDelta = 1
-        var g_frameRate = 166.66
         var g_packetSize = 8
         var g_normingVal = {'0':0,'1':0}
+        var g_frameViewer = new FrameViewer();
 
-        var g_sequenceInfo = {}
-        g_sequenceInfo.max = 1
-        var g_channel
+        var g_sequenceInfo = {
+            max: 1,
+        };
 
         function initShaders() {
             var shaderProgram
@@ -352,19 +358,12 @@
             textureCoordBuffer = createTextureCoordBuffer()
         }
 
-        var image = new Image()
         function getNextFrame(response) {
-            //TODO: remove image add to zProjection.texture
-            image.src = 'data:image/jpeg;base64,'+response.z_projection
+            zProjection.texture.image.src = 'data:image/jpeg;base64,'+response.z_projection
             xProjection.texture.image.src = 'data:image/jpeg;base64,'+response.x_projection
             yProjection.texture.image.src = 'data:image/jpeg;base64,'+response.y_projection
         }
     
-        //TODO: Remove these global vars
-        var zoom = -3.5;
-        var offset = {x:0,y:0};
-        var z_height = 2;
-        var z_width = 2;
         function drawScene() {
             gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -373,8 +372,9 @@
                 num_channels = 2
             }
 
-            var translate_y = z_height/2 + 0.35;
-            var translate_x = z_width/2 + 0.35;
+            var translate_y = g_frameViewer.mainProjectionHeight/2 + 0.35;
+            var translate_x = g_frameViewer.mainProjectionWidth/2 + 0.35;
+            var offset = g_frameViewer.offset;
             gl.uniform1i(zProjection.shaderProgram.channelsUniform, num_channels)
             gl.uniform1i(xProjection.shaderProgram.channelsUniform, num_channels)
             gl.uniform1i(yProjection.shaderProgram.channelsUniform, num_channels)
@@ -383,7 +383,7 @@
 
             mat4.identity(mvMatrix)
 
-            mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, zoom])
+            mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, g_frameViewer.zoomLevel])
             gl.bindBuffer(gl.ARRAY_BUFFER, zProjection.vertexPositionBuffer)
             gl.vertexAttribPointer(zProjection.shaderProgram.vertexPositionAttribute, 
                     zProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
@@ -430,50 +430,15 @@
             
             setMatrixUniforms()
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
-
         }
 
 
-        var play
-        var mouseState = {}
         $("#gl_canvas").ready(function webGLStart (){
-            var gl_canvas = $('#gl_canvas')
-            gl_canvas.bind('DOMMouseScroll mousewheel', function(event) {
-                if (event.originalEvent.wheelDelta > 0 || event.originalEvent.detail < 0) {
-                    zoom = Math.min(zoom+0.1,-0.1);
-                } else {
-                    zoom -= 0.1;
-                }
-                if (!play) {
-                    drawScene();
-                }
-            });
+            var gl_canvas = $('#gl_canvas');
+            g_frameViewer.initMouse(gl_canvas);
 
-            gl_canvas.bind('mousedown',function(){
-                mouseState.mouseDown = true;
-            });
-
-            gl_canvas.bind('mouseup',function(){
-                mouseState.mouseDown = false;
-            });
-
-            gl_canvas.mousemove(function(event) {
-                if (mouseState.mouseDown) {
-                    var dx = event.clientX - mouseState.lastMouseX
-                    var dy = event.clientY - mouseState.lastMouseY
-                    offset.x += dx/400
-                    offset.y -= dy/400
-
-                    if (!play) {
-                        drawScene();
-                    }
-                }
-                mouseState.lastMouseX = event.clientX;
-                mouseState.lastMouseY = event.clientY;
-            });
-
-            var canvas = document.getElementById("gl_canvas")
-            gl = initGL(canvas)
+            var canvas = gl_canvas[0];
+            gl = initGL(canvas);
             zProjection = {
                 shaderProgram: initShaders(),
                 vertexPositionBuffer: 
@@ -481,7 +446,7 @@
                 textureCoordBuffer: createTextureCoordBuffer(),
                 texture: gl.createTexture()
             }
-            zProjection.texture.image = image
+            zProjection.texture.image = new Image()
 
             xProjection = {
                 shaderProgram: initShaders(),
@@ -501,11 +466,12 @@
             }           
             yProjection.texture.image = new Image()
 
+            zProjection.texture.image.onload = function(){imageOnload()};
+
             gl.clearColor(0.0, 0.0, 0.0, 1.0)
             gl.enable(gl.DEPTH_TEST)
-            
-            play = false
-        })
+        });
+
         
         function playFramesFromQueue(forceStep) {
             var min = g_frameBuffer.keys[0]
@@ -514,7 +480,7 @@
             $('#buff_max').text(g_frameBuffer.maxSortedIndex)
             var nextFrame = g_frameBuffer.next()
             if (g_frameBuffer.has_next()) {
-                if (play || forceStep) {
+                if (g_frameViewer.isPlaying() || forceStep) {
                     $('#buff_curr').text(nextFrame)
                     var thisFrame = g_frameBuffer.popFrame(nextFrame)
                     if(!$('#frame_slider').hasClass('moving')) {
@@ -523,9 +489,9 @@
                     if (!thisFrame) debugger;
                     xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
                     yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
-                    image.src = 'data:image/jpeg;base64,'+thisFrame.z
+                    zProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.z
                     $('#this_frame_label').text(parseInt(nextFrame)+1)
-                    setTimeout(function(){playFramesFromQueue()}, g_frameRate)
+                    setTimeout(function(){playFramesFromQueue()}, g_frameViewer.frameDelay)
 
                     if (!fetching && !g_frameBuffer.isFull()) {
                         fetching = true
@@ -535,7 +501,7 @@
                 }
             } else {
                 $('#buffering_warning').text('buffering... please wait')
-                play = false
+                g_frameViewer.setPlaying(false);
                 if (!fetching) {
                     fetching = true
                     fetchFrames()
@@ -556,7 +522,7 @@
                             path: g_filePath,
                             frameDelta: g_frameBuffer.frameDelta,
                             normingVal: g_normingVal,
-                            channel: g_channel,
+                            channel: g_sequenceInfo.channel,
                             sequenceId: g_frameBuffer.sequenceId
                         },
                         cache: false,
@@ -585,7 +551,7 @@
                     })
                 } else {
                     fetching = false
-                    if (play) {
+                    if (g_frameViewer.isPlaying()) {
                         $('#buffering_warning').text('')
                     } else {
                         $('#buffering_warning').text('press start to resume playback')
@@ -594,8 +560,8 @@
              }
         }
 
-
-        image.onload = function() {
+        //TODO: is it possible for z projection to finish loading before x and y?
+       function imageOnload() {
             updateTextureData(zProjection.texture)
             updateTextureData(xProjection.texture)
             updateTextureData(yProjection.texture)
@@ -619,17 +585,17 @@
         }
 
         $('#start_button').click(function() {
-            if (!play) {
-                play = true
+            if (!g_frameViewer.isPlaying()) {
+                g_frameViewer.setPlaying(true)
                 playFramesFromQueue()
-                if (fetching && play) {
+                if (fetching && g_frameViewer.isPlaying()) {
                     $('#buffering_warning').text('')
                 }
             }
         })
 
         $('#stop_button').click(function() {
-            play = false
+            g_frameViewer.setPlaying(false);
         })
 
         function resizeBuffers(x,y,z) {
@@ -642,8 +608,8 @@
                 width = 2.0
            }
 
-           z_height = height;
-           z_width = width;
+           g_frameViewer.mainProjectionHeight = height;
+           g_frameViewer.mainProjectionWidth = width;
 
            zProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,height)
            xProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,depth,height)
@@ -661,6 +627,7 @@
                 }).done(function(response) {
                     $('#indicator').show()
                     $('#indicator').fadeOut(1000)
+                    response.channel = g_sequenceInfo.channel;
                     g_sequenceInfo=response,
                     $('#frame_num_label').text(g_sequenceInfo.max)  
 
@@ -742,7 +709,7 @@
         $('#load_dataset_button').click(function() {
             var fullPath = $('#file_input').val()
             if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
-                g_channel = $('#channel_select').val()
+                g_sequenceInfo.channel = $('#channel_select').val()
                 $('#load_box').addClass('hidden')
                 $('#load_button').removeClass('selected')
                 setSelectedData()
@@ -768,7 +735,7 @@
             $('#options_button').addClass('selected')
             $('#options_box').removeClass('hidden')
 
-            $('#frame_rate_input').val(Math.round(String(1000/g_frameRate)))
+            $('#frame_rate_input').val(String(Math.round(g_frameViewer.getFrameRate())))
             $('#packet_size_input').val(g_packetSize)
             $('#buffer_size_input').val(g_frameBuffer.maxLength)
         })
@@ -776,12 +743,11 @@
         $('#options_cancel').click(function() {
             $('#options_box').addClass('hidden')
             $('#options_button').removeClass('selected')
-            g_frameRate = 1000/$('#frame_rate_input').val()
+            g_frameViewer.setFrameRate($('#frame_rate_input').val())
             g_packetSize = parseInt($('#packet_size_input').val(),10)
             if (g_frameBuffer) {
                 g_frameBuffer.maxLength = parseInt($('#buffer_size_input').val(),10)
                 var normingVal = $('#norming_value_input').val()
-                
             }
         })
 
@@ -853,6 +819,51 @@
             $(this).removeClass('moving')
             g_frameBuffer.set_next($('#frame_slider').val())
         })
+
+        function showPlane() {
+            var idx = g_volumeBuffer.index;
+            xProjection.texture.image.src = 'data:image/jpeg;base64,'+g_volumeBuffer[idx].x;
+            yProjection.texture.image.src = 'data:image/jpeg;base64,'+g_volumeBuffer[idx].y;
+            zProjection.texture.image.src = 'data:image/jpeg;base64,'+g_volumeBuffer[idx].z;
+        }
+
+        $('#volume_button').click(function() {
+            if($('#volume_button').hasClass('selected')) {
+                $('#volume_button').removeClass('selected');
+                return;
+            }
+            $('#volume_button').addClass('loading');
+            $.ajax({
+                url: '{{ url_for('.getVolume', _external=True) }}',
+                type: 'POST',
+                data: {
+                    frame: g_frameBuffer.current,
+                    path: g_filePath,
+                    normingVal: g_normingVal,
+                    channel: g_sequenceInfo.channel,
+                    sequenceId: g_frameBuffer.sequenceId
+                },
+                cache: false,
+            }).done(function(response) {
+                $('#volume_button').removeClass('loading');
+                $('#volume_button').addClass('selected');
+                if (response.sequenceId != g_frameBuffer.sequenceId) {
+                    return;
+                }
+
+                $('#indicator').show();
+                $('#indicator').fadeOut(1000);
+
+                for (var plane in response) {
+                    var infoarr = plane.split('_');
+                    if (infoarr[0] == 'plane') {
+                        g_volumeBuffer[infoarr[1]] = response[plane];
+                    }
+                }
+                g_volumeBuffer.index = 0;
+                showPlane();
+           });
+        });
 
     </script>
 
