@@ -148,12 +148,18 @@
         .width100 {
             width: 100%;
         }
-        
-        .slider {
-            background-image: -webkit-gradient(linear,left top,right top,color-stop(0, blue),color-stop(' + value + ', red)
-        }
         #volume_button.loading {
-            background-color: #FFA500;
+            color: #FFA500;
+        }
+        #volume_button.loaded {
+            background-color: #0F0;
+            color: #000;
+        }
+        #volume_button.loaded.selected {
+            color: #555;
+        }
+        #volume_button.loaded:hover {
+            color: #555;
         }
     </style>
 
@@ -300,6 +306,7 @@
         var g_frameBuffer
         var g_volumeBuffer = [];
         var g_filePath
+        var g_plane = 0;
         var g_frameDelta = 1
         var g_packetSize = 8
         var g_normingVal = {'0':0,'1':0}
@@ -483,6 +490,11 @@
                 if (g_frameViewer.isPlaying() || forceStep) {
                     $('#buff_curr').text(nextFrame)
                     var thisFrame = g_frameBuffer.popFrame(nextFrame)
+                    if (g_frameBuffer.hasVolume()) {
+                        $('#volume_button').addClass('loaded');
+                    } else {
+                        $('#volume_button').removeClass('loaded');
+                    }
                     if(!$('#frame_slider').hasClass('moving')) {
                         $('#frame_slider').val(nextFrame)
                     }
@@ -520,6 +532,7 @@
                         data: {
                             frames: frames.join(','),
                             path: g_filePath,
+                            planes: [0],
                             frameDelta: g_frameBuffer.frameDelta,
                             normingVal: g_normingVal,
                             channel: g_sequenceInfo.channel,
@@ -585,6 +598,7 @@
         }
 
         $('#start_button').click(function() {
+            g_plane = 0;
             if (!g_frameViewer.isPlaying()) {
                 g_frameViewer.setPlaying(true)
                 playFramesFromQueue()
@@ -798,6 +812,8 @@
         })
 
         $('#single_step_button').click(function(){
+            $('#volume_button').removeClass('selected');
+            g_plane = 0;
             var frameDelta = g_frameBuffer.frameDelta
             g_frameBuffer.set_frameDelta(Math.abs(g_frameBuffer.frameDelta))
             playFramesFromQueue(true)
@@ -805,6 +821,8 @@
         })
 
         $('#single_reverse_button').click(function(){
+            $('#volume_button').removeClass('selected');
+            g_plane = 0;
             var frameDelta = g_frameBuffer.frameDelta
             g_frameBuffer.set_frameDelta(-Math.abs(g_frameBuffer.frameDelta))
             playFramesFromQueue(true)
@@ -820,24 +838,34 @@
             g_frameBuffer.set_next($('#frame_slider').val())
         })
 
-        function showPlane() {
-            var idx = g_volumeBuffer.index;
-            xProjection.texture.image.src = 'data:image/jpeg;base64,'+g_volumeBuffer[idx].x;
-            yProjection.texture.image.src = 'data:image/jpeg;base64,'+g_volumeBuffer[idx].y;
-            zProjection.texture.image.src = 'data:image/jpeg;base64,'+g_volumeBuffer[idx].z;
+        function showPlane(plane) {
+            var thisFrame = g_frameBuffer.popFrame(g_frameBuffer.current,plane);
+            xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x;
+            yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y;
+            zProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.z;
         }
 
         $('#volume_button').click(function() {
             if($('#volume_button').hasClass('selected')) {
                 $('#volume_button').removeClass('selected');
+                showPlane(0);
                 return;
             }
+            
+            if (g_frameBuffer.hasVolume()) {
+                $('#volume_button').addClass('selected');
+                g_plane = 1;
+                showPlane(1);
+                return;
+            }
+
             $('#volume_button').addClass('loading');
             $.ajax({
-                url: '{{ url_for('.getVolume', _external=True) }}',
+                url: '{{ url_for('.getFrames', _external=True) }}',
                 type: 'POST',
                 data: {
-                    frame: g_frameBuffer.current,
+                    frames: g_frameBuffer.current,
+                    planes: g_sequenceInfo.planes,
                     path: g_filePath,
                     normingVal: g_normingVal,
                     channel: g_sequenceInfo.channel,
@@ -846,7 +874,9 @@
                 cache: false,
             }).done(function(response) {
                 $('#volume_button').removeClass('loading');
-                $('#volume_button').addClass('selected');
+                if (typeof response["frame_"+g_frameBuffer.current] !== "undefined") {
+                    $('#volume_button').addClass('loaded');
+                }
                 if (response.sequenceId != g_frameBuffer.sequenceId) {
                     return;
                 }
@@ -854,14 +884,7 @@
                 $('#indicator').show();
                 $('#indicator').fadeOut(1000);
 
-                for (var plane in response) {
-                    var infoarr = plane.split('_');
-                    if (infoarr[0] == 'plane') {
-                        g_volumeBuffer[infoarr[1]] = response[plane];
-                    }
-                }
-                g_volumeBuffer.index = 0;
-                showPlane();
+                g_frameBuffer.addFrames(response);
            });
         });
 

@@ -63,6 +63,7 @@ def getInfo():
                 norm_factors[key] += [np.percentile(subframe[np.where(np.logical_not(np.isnan(subframe)))],98)]
 
     json = {
+        'planes': range(seq.shape[1]+1),
         'height': seq.shape[2],
         'width': seq.shape[3],
         'max': length
@@ -132,6 +133,10 @@ def getFrames():
     norming_val = request.form.getlist('normingVal[]', type=float)
     sequenceId = request.form.get('sequenceId')
     channel = request.form.get('channel')
+    planes = request.form.getlist('planes[]',type=int)
+    if planes is None:
+        planes = [0]
+
     quality = 40
     if channel == 'overlay':
         channel = None
@@ -153,37 +158,52 @@ def getFrames():
             end = True
             continue
 
-        vol = seq._get_frame(frame_number)
-        if channel is not None:
-            vol = vol[:,:,:,channel]
-            vol /= (norming_val[channel]/255)
-            vol = np.clip(vol, 0, 255)
-        else:
-            vol = np.hstack((vol[:,:,:,0]/norming_val[0],vol[:,:,:,1]/norming_val[1]))
-            vol*=255
-        surf = np.nanmean(vol,axis=0)
-        img = Image.fromarray(surf.astype('uint8'),'L')
-        img_io_z = StringIO.StringIO()
-        img.save(img_io_z, 'jpeg', quality=quality)
-        img_io_z.seek(0)
+        frames['frame_'+str(frame_number)] = {};
+        for plane in planes:
 
-        surf = np.nanmean(vol,axis=1)
-        img = Image.fromarray(surf.astype('uint8'),'L')
-        img_io_y = StringIO.StringIO()
-        img.save(img_io_y, 'jpeg', quality=quality)
-        img_io_y.seek(0)
+            vol = seq._get_frame(frame_number)
+            if channel is not None:
+                vol = vol[:,:,:,channel]
+                vol /= (norming_val[channel]/255)
+                vol = np.clip(vol, 0, 255)
+            else:
+                vol = np.hstack((vol[:,:,:,0]/norming_val[0],vol[:,:,:,1]/norming_val[1]))
+                vol*=255
 
-        surf = np.nanmean(vol,axis=2).T
-        img = Image.fromarray(surf.astype('uint8'),'L')
-        img_io_x = StringIO.StringIO()
-        img.save(img_io_x, 'jpeg', quality=quality)
-        img_io_x.seek(0)
-        
-        frames['frame_'+str(frame_number)] = {
-            'z':base64.b64encode(img_io_z.read()),
-            'y':base64.b64encode(img_io_y.read()),
-            'x':base64.b64encode(img_io_x.read())
-        }
+            if plane == 0:
+                zsurf = np.nanmean(vol,axis=0)
+            else:
+                zsurf = vol[plane-1,:,:]
+            img = Image.fromarray(zsurf.astype('uint8'),'L')
+            img_io_z = StringIO.StringIO()
+            img.save(img_io_z, 'jpeg', quality=quality)
+            img_io_z.seek(0)
+
+            if plane == 0:
+                ysurf = np.nanmean(vol,axis=1)
+            else:
+                ysurf = np.zeros((vol.shape[0],vol.shape[2]))
+                ysurf[plane-1,:]=np.nanmean(zsurf,axis=0)
+            img = Image.fromarray(ysurf.astype('uint8'),'L')
+            img_io_y = StringIO.StringIO()
+            img.save(img_io_y, 'jpeg', quality=quality)
+            img_io_y.seek(0)
+
+            if plane == 0:
+                xsurf = np.nanmean(vol,axis=2).T
+            else:
+                xsurf = np.zeros((vol.shape[1],vol.shape[0]))
+                xsurf[:,plane-1]=np.nanmean(zsurf,axis=1).T
+            img = Image.fromarray(xsurf.astype('uint8'),'L')
+            img_io_x = StringIO.StringIO()
+            img.save(img_io_x, 'jpeg', quality=quality)
+            img_io_x.seek(0)
+            
+            frames['frame_'+str(frame_number)][plane] = {
+                'z':base64.b64encode(img_io_z.read()),
+                'y':base64.b64encode(img_io_y.read()),
+                'x':base64.b64encode(img_io_x.read())
+            }
 
     return jsonify(end=end,sequenceId=sequenceId,**frames)
 
