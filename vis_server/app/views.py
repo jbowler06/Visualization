@@ -30,6 +30,7 @@ from PIL import Image
 import StringIO
 import struct
 
+import random
 
 def getSequence(directory):
     if (os.path.splitext(directory)[-1] == '.sima'):
@@ -52,15 +53,16 @@ def getInfo():
 
     length = len(seq)
     norm_factors = {}
-    for channel in  xrange(seq.shape[4]):
+    for channel in xrange(seq.shape[4]):
         norm_factors['channel_' + str(channel)] = []
     
     for frame_index in [0,int(length/2),-1]:
         frame = seq._get_frame(frame_index)
-        for channel,key in enumerate(norm_factors.keys()):
+        for channel in xrange(seq.shape[4]):
             subframe = frame[:,:,:,channel]
-            if len(subframe[np.where(np.logical_not(np.isnan(subframe)))]) > 0:
-                norm_factors[key] += [np.percentile(subframe[np.where(np.logical_not(np.isnan(subframe)))],98)]
+            factor = np.percentile(subframe[np.where(np.isfinite(subframe))],98)
+            if np.isfinite(factor):
+                norm_factors['channel_'+str(channel)] += [factor]
 
     json = {
         'planes': range(seq.shape[1]+1),
@@ -87,42 +89,6 @@ def getChannels(directory):
     if (len(channels) > 1):
         channels += ['overlay']
     return render_template('select_list.html',options=channels) 
-
-"""
-@app.route('/getFrame/<frame_number>', methods=['GET','POST'])
-def getFrame(frame_number):
-    ds_path = '/data/Nathan/2photon/rewardRemapping/nd125/02112015/day1-session-003/day1-session-003.sima'
-    NORMING_VAL = 2194/255
-    channel = 0
-    ds = ImagingDataset.load(ds_path)
-    seq = ds.__iter__().next()
-    vol = seq._get_frame(int(frame_number))
-    vol /= NORMING_VAL
-    vol = np.clip(vol, 0, 255)
-
-    surf = np.nanmean(vol,axis=0)[:,:,channel]
-    img = Image.fromarray(surf.astype('uint8'),'L')
-    img_io_z = StringIO.StringIO()
-    img.save(img_io_z, 'jpeg', quality=40)
-    img_io_z.seek(0)
-
-    surf = np.nanmean(vol,axis=1)[:,:,channel]
-    img = Image.fromarray(surf.astype('uint8'),'L')
-    img_io_y = StringIO.StringIO()
-    img.save(img_io_y, 'jpeg', quality=40)
-    img_io_y.seek(0)
-
-    surf = np.fliplr(np.nanmean(vol,axis=2)[:,:,channel].T)
-    img = Image.fromarray(surf.astype('uint8'),'L')
-    img_io_x = StringIO.StringIO()
-    img.save(img_io_x, 'jpeg', quality=40)
-    img_io_x.seek(0)
-
-    return jsonify(
-        z_projection=base64.b64encode(img_io_z.read()),
-        y_projection=base64.b64encode(img_io_y.read()),
-        x_projection=base64.b64encode(img_io_x.read()))
-"""
 
 
 @app.route('/getFrames', methods=['GET','POST'])
@@ -206,67 +172,6 @@ def getFrames():
             }
 
     return jsonify(end=end,sequenceId=sequenceId,**frames)
-
-
-@app.route('/getVolume', methods=['GET','POST'])
-def getVolume():
-    ds_path = request.form.get('path')
-    requestFrame = request.form.get('frame', type=int)
-    #requestPlanes = request.form.getlist('planes[]', type=int)
-    norming_val = request.form.getlist('normingVal[]', type=float)
-    sequenceId = request.form.get('sequenceId')
-    channel = request.form.get('channel')
-    quality = 40
-    if channel == 'overlay':
-        channel = None
-
-    if (os.path.splitext(ds_path)[-1] == '.sima'):
-        ds = ImagingDataset.load(ds_path)
-        seq = ds.__iter__().next()
-        channel = ds._resolve_channel(channel)
-    else:
-        seq = Sequence.create('HDF5',ds_path,'tzyxc')
-        if channel:
-            channel = int(channel.split('_')[-1])
-
-    end = False
-    planes = {}
-    for plane in xrange(seq.shape[1]):
-        vol = seq._get_frame(requestFrame)
-        if channel is not None:
-            vol = vol[:,:,:,channel]
-            vol /= (norming_val[channel]/255)
-            vol = np.clip(vol, 0, 255)
-        else:
-            vol = np.hstack((vol[:,:,:,0]/norming_val[0],vol[:,:,:,1]/norming_val[1]))
-            vol*=255
-        surf = vol[plane,:,:]
-        img = Image.fromarray(surf.astype('uint8'),'L')
-        img_io_z = StringIO.StringIO()
-        img.save(img_io_z, 'jpeg', quality=quality)
-        img_io_z.seek(0)
-
-        ysurf = np.zeros((vol.shape[0],vol.shape[2]))
-        ysurf[plane,:]=np.nanmean(surf,axis=0)
-        img = Image.fromarray(ysurf.astype('uint8'),'L')
-        img_io_y = StringIO.StringIO()
-        img.save(img_io_y, 'jpeg', quality=quality)
-        img_io_y.seek(0)
-
-        xsurf = np.zeros((vol.shape[1],vol.shape[0]))
-        xsurf[:,plane]=np.nanmean(surf,axis=1).T
-        img = Image.fromarray(xsurf.astype('uint8'),'L')
-        img_io_x = StringIO.StringIO()
-        img.save(img_io_x, 'jpeg', quality=quality)
-        img_io_x.seek(0)
-        
-        planes['plane_'+str(plane)] = {
-            'z':base64.b64encode(img_io_z.read()),
-            'y':base64.b64encode(img_io_y.read()),
-            'x':base64.b64encode(img_io_x.read())
-        }
-
-    return jsonify(sequenceId=sequenceId,**planes)
 
 
 @app.route('/getFolders/<directory>')
