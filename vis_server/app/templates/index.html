@@ -186,7 +186,7 @@
             <div>
                 <p><span class="floatLeft" >normalizing constants:</span>
                     <input type="text" class="norming_value_input floatLeft" id="ch1_norm_input">
-                    <input type="text" class="norming_value_input floatLeft" id="ch2_norm_input">
+                    <input type="text" class="norming_value_input floatLeft hidden" id="ch2_norm_input">
                 </p>
             </div>
             <p style="width:auto;margin:0px 5px">
@@ -650,7 +650,10 @@
                     }
 
                     if (response['channel_1']) {
+                        $('#ch2_norm_input').removeClass('hidden');
                         $('#ch2_norm_input').val(response['channel_1'])
+                    } else {
+                        $('#ch2_norm_input').addClass('hidden');
                     }
 
                     fetching = true
@@ -664,7 +667,7 @@
                 g_frameBuffer.buffer = []
             }
             g_frameBuffer = new FrameBuffer(Date.now(),350)
-            g_filePath = $('#file_input').val()
+            g_filePath = $('#file_input').val().trim()
             g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
             if (!g_normingVal) {
                 alert('normalizing value unset')
@@ -690,7 +693,7 @@
         }
 
         function fileSelection(file) {
-            var fullPath = $('#file_input').val()
+            var fullPath = $('#file_input').val().trim();
             if (!fullPath) {
                 fullPath = '/'
             }
