@@ -13,6 +13,8 @@ import glob
 import cPickle as pickle
 import base64
 import urllib
+import matplotlib
+import matplotlib.cm
 
 from flask import render_template
 from flask import request
@@ -41,6 +43,11 @@ def getSequence(directory):
     return seq
 
 
+def convertList16(arr):
+    conv = lambda x: [int('0'+hex(int(x+0.5))[2:][:-2],16),int(hex(int(x+0.5))[2:][-2:],16)]
+    return list(it.chain(*map(conv,arr)))
+
+
 @app.route('/')
 @app.route('/index')
 def index():
@@ -49,7 +56,12 @@ def index():
 @app.route('/getInfo', methods=['GET','POST'])
 def getInfo():
     ds_path = request.form.get('path')
-    seq = getSequence(ds_path)
+
+    if (os.path.splitext(ds_path)[-1] == '.sima'):
+        ds = ImagingDataset.load(ds_path)
+        seq = ds.__iter__().next()
+    else:
+        seq = Sequence.create('HDF5',ds_path,'tzyxc')
 
     length = len(seq)
     norm_factors = {}
@@ -70,6 +82,7 @@ def getInfo():
         'width': seq.shape[3],
         'max': length
     }
+
     for channel in norm_factors.keys():
         json[channel] = int(np.nanmean(norm_factors[channel]))
 
@@ -91,12 +104,58 @@ def getChannels(directory):
     return render_template('select_list.html',options=channels) 
 
 
+@app.route('/getLabels', methods=['GET','POST'])
+def getLabels():
+    ds_path = request.form.get('path')
+    try:
+        dataset = ImagingDataset.load(ds_path)
+    except:
+        return ''
+
+    labels = dataset.ROIs.keys()
+    return render_template('select_list.html',options=labels)
+
+
+def convertToBin(arr):
+    dat = arr.reshape((1,arr.shape[0]))
+
+    img = Image.fromarray(dat.astype('uint8'),'L')
+    strBuffer = StringIO.StringIO()
+    img.save(strBuffer, 'png')
+    strBuffer.seek(0)
+
+    imageString = "data:image/png;base64,"+base64.b64encode(strBuffer.read())
+
+    return (imageString)
+
+
+@app.route('/getRois', methods=['GET','POST'])
+def getRois():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')   
+    
+    dataset = ImagingDataset.load(ds_path)
+    convertedRois = {}
+    rois = dataset.ROIs[label]
+    for roi in rois:
+        poly = roi.polygons[0]
+        coords = []
+        
+        for x,y in zip(*poly.exterior.coords.xy):
+            coords += [np.max((0,x)), np.max((0,y))]
+            
+        try:
+            convertedRois[roi.label] = convertList16(coords)
+        except:
+            import pdb; pdb.set_trace()
+
+    return jsonify(**convertedRois)
+
 @app.route('/getFrames', methods=['GET','POST'])
 def getFrames():
     ds_path = request.form.get('path')
-    step = request.form.get('frameDelta', type=int)
-    requestFrames = request.form.get('frames').split(',')
-    norming_val = request.form.getlist('normingVal[]', type=float)
+    requestFrames = request.form.getlist('frames[]',type=int)
+    normingVal = request.form.getlist('normingVal[]', type=float)
     sequenceId = request.form.get('sequenceId')
     channel = request.form.get('channel')
     planes = request.form.getlist('planes[]',type=int)
@@ -107,6 +166,7 @@ def getFrames():
     if channel == 'overlay':
         channel = None
 
+    ds = None
     if (os.path.splitext(ds_path)[-1] == '.sima'):
         ds = ImagingDataset.load(ds_path)
         seq = ds.__iter__().next()
@@ -119,23 +179,31 @@ def getFrames():
     end = False
     frames = {}
     for frame_number in requestFrames:
-        frame_number = int(frame_number)
-        if frame_number > len(seq)-1 or frame_number < 0:
+        norming_val = normingVal[:]
+        if frame_number > len(seq)-1 or frame_number < -1:
             end = True
             continue
-
-        frames['frame_'+str(frame_number)] = {};
-        for plane in planes:
-
+        elif frame_number == -1 and ds is not None:
+            vol = ds.time_averages
+            for channel in xrange(vol.shape[3]):
+                subframe = vol[:,:,:,channel]
+                factor = np.nanmax(subframe)
+                if np.isfinite(factor):
+                    norming_val[channel] = factor
+            end = True
+        else:
             vol = seq._get_frame(frame_number)
-            if channel is not None:
-                vol = vol[:,:,:,channel]
-                vol /= (norming_val[channel]/255)
-                vol = np.clip(vol, 0, 255)
-            else:
-                vol = np.hstack((vol[:,:,:,0]/norming_val[0],vol[:,:,:,1]/norming_val[1]))
-                vol*=255
 
+        if channel is not None:
+            vol = vol[:,:,:,channel]
+            vol /= ((norming_val[channel])/255)
+            vol = np.clip(vol, 0, 255)
+        else:
+            vol = np.hstack((vol[:,:,:,0]/norming_val[0],vol[:,:,:,1]/norming_val[1]))
+            vol*=255
+        frames['frame_'+str(frame_number)] = {};
+        
+        for plane in planes:
             if plane == 0:
                 zsurf = np.nanmean(vol,axis=0)
             else:

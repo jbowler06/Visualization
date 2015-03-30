@@ -10,11 +10,23 @@
             background-color: #000;
             color: #F00;
         }
-        #gl_canvas {
-            border: thin solid #0F0;
+        .canvasContainer {
             margin: auto auto;
             display: block;
+            position: relative;
+            width: 800px;
         }
+        .webGlCanvas {
+            position: absolute;
+            left: 0px;
+            top: 0px;
+        }
+        #gl_canvas {
+            border: thin solid #0F0;
+        }
+        #roi_canvas {
+            border: thin solid #F00;
+        }   
         .floatLeft {
             float: Left;
         }
@@ -148,6 +160,9 @@
         .width100 {
             width: 100%;
         }
+        .height100 {
+            height: 100%;
+        }
         #volume_button.loading {
             color: #FFA500;
         }
@@ -184,7 +199,7 @@
                 <div class="button smallButton floatLeft" id="file_up_level"><span>..</span></div>
             </p>
             <div>
-                <p><span class="floatLeft" >normalizing constants:</span>
+                <p><span class="floatLeft">normalizing constants:</span>
                     <input type="text" class="norming_value_input floatLeft" id="ch1_norm_input">
                     <input type="text" class="norming_value_input floatLeft hidden" id="ch2_norm_input">
                 </p>
@@ -218,6 +233,22 @@
                 <div class="button smallButton floatRight" id="options_cancel"><span>ok</span></div>
             </p>
         </div>
+        <div class="button" id="roi_button"><span>rois</span><br/><span><small>(2D only)</small></span></div>
+        <div class="loadBox hidden" id="roi_box">
+            <p>rois label:</p>
+            <p style="width:auto;margin:0px 5px">
+                <select id="label_select"></select>
+                <div class="button smallButton floatLeft" id="roi_load_button"><span>go</span></div>
+                <div class="button smallButton floatRight" id="roi_cancel"><span>X</span></div>
+            </p>
+            <p>shading:</p>
+            <p>
+                <input type="range" name="roi_slider" id="roi_slider" min="0" max="100" value="0">
+            </p>
+            <p>
+                <div class="button floatLeft" id="clear_rois_button"><span>clear</span></div>
+            </p>
+        </div>
         <div class="button" id="start_button"><span>start</span></div>
         <div class="button" id="stop_button"><span>stop</span></div>
         <div class="largeLabel" id="frame_number_label">
@@ -245,9 +276,12 @@
         </div>
         <div class="indicator floatLeft" id="indicator"><span>&nbsp;</span></div>
     </div>
-    <div class="canvasContainer">
-        <canvas id="gl_canvas" width="800" height="700"></canvas>
-        <div class="button smallButton" id="volume_button" style="position:absolute; top:0px; right:0px;">V</div>
+    <div class="width100 height100">
+        <div class="canvasContainer">
+            <canvas class="webGlCanvas" id="gl_canvas" width="800" height="700"></canvas>
+            <canvas class="webGlCanvas" id="roi_canvas" width="800" height="700"></canvas>
+            <div class="button smallButton" id="volume_button" style="position:absolute; top:0px; right:0px;">V</div>
+        </div>
     </div>
 
     <script type="text/javascript" 
@@ -260,6 +294,31 @@
         src="{{ url_for('static', filename='scripts/webgl_helpers.js') }}"></script>
     <script type="text/javascript" 
         src="{{ url_for('static', filename='scripts/frame_viewer.js') }}"></script>
+    <script type="text/javascript" 
+        src="{{ url_for('static', filename='scripts/tinycolor.js') }}"></script>
+
+
+    <script id="shape-shader-fs" type="x-shader/x-fragment">
+        precision mediump float;
+        uniform vec3 uColor;
+        uniform float uOpacity;
+
+        void main(void) {
+            gl_FragColor = vec4(uColor.rgb*uOpacity,uOpacity);
+        }
+    </script>
+
+    <script id="shape-shader-vs" type="x-shader/x-vertex">
+        attribute vec3 aVertexPosition;
+
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
+
+        void main(void) {
+            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        }
+    </script>
+
 
     <script id="shader-fs" type="x-shader/x-fragment">
         precision mediump float;
@@ -271,7 +330,7 @@
         void main(void) {
             if (num_channels == 1) {
                 vec4 myTex = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-                gl_FragColor = myTex;
+                gl_FragColor = vec4(myTex.rgb, 1.0);
             } else {
                 vec4 channel1 = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + 0.5));
                 vec4 channel2 = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
@@ -299,7 +358,9 @@
     </script>
 
     <script type="text/javascript">
-        var gl
+        var frameContext
+        var roiGl
+
         var zProjection
         var xProjection
         var yProjection
@@ -316,12 +377,39 @@
             max: 1,
         };
 
-        function initShaders() {
-            var shaderProgram
-            var fragmentShader = getShader(gl, "shader-fs")
+
+        function initShapeShaders(gl) {
+            var fragmentShader = getShader(gl, 'shape-shader-fs');
+            var vertexShader = getShader(gl, "shape-shader-vs");
+
+            var shaderProgram = gl.createProgram();
+            gl.attachShader(shaderProgram, vertexShader);
+            gl.attachShader(shaderProgram, fragmentShader);
+            gl.linkProgram(shaderProgram);
+
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                alert("Could not initialise shaders");
+            }
+
+            gl.useProgram(shaderProgram);
+
+            shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+            shaderProgram.colorUniform = gl.getUniformLocation(shaderProgram, "uColor");
+            shaderProgram.opacityUniform = gl.getUniformLocation(shaderProgram, "uOpacity");
+            gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+            shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+            shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+            gl.shaderProgram = shaderProgram;
+        }
+
+
+
+        function initShaders(gl, fragShader) {
+            var fragmentShader = getShader(gl, fragShader)
             var vertexShader = getShader(gl, "shader-vs")
 
-            shaderProgram = gl.createProgram()
+            var shaderProgram = gl.createProgram()
             gl.attachShader(shaderProgram, vertexShader)
             gl.attachShader(shaderProgram, fragmentShader)
             gl.linkProgram(shaderProgram)
@@ -342,38 +430,23 @@
             shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler")
 
             shaderProgram.channelsUniform = gl.getUniformLocation(shaderProgram, "num_channels")
-            
-            return shaderProgram
+            gl.shaderProgram = shaderProgram
         }
 
 
         var mvMatrix = mat4.create()
         var pMatrix = mat4.create()
-        function setMatrixUniforms() {
-            gl.uniformMatrix4fv(zProjection.shaderProgram.pMatrixUniform, false, pMatrix)
-            gl.uniformMatrix4fv(zProjection.shaderProgram.mvMatrixUniform, false, mvMatrix)
-            gl.uniformMatrix4fv(xProjection.shaderProgram.pMatrixUniform, false, pMatrix)
-            gl.uniformMatrix4fv(xProjection.shaderProgram.mvMatrixUniform, false, mvMatrix)
-            gl.uniformMatrix4fv(yProjection.shaderProgram.pMatrixUniform, false, pMatrix)
-            gl.uniformMatrix4fv(yProjection.shaderProgram.mvMatrixUniform, false, mvMatrix)
+        function setMatrixUniforms(gl) {
+            gl.uniformMatrix4fv(gl.shaderProgram.pMatrixUniform, false, pMatrix)
+            gl.uniformMatrix4fv(gl.shaderProgram.mvMatrixUniform, false, mvMatrix)
         }
-        
-        var squareVertexPositionBuffer
-        var textureCoordBuffer
-        function initBuffers() {
-            squareVertexPositionBuffer = createSquareVertexPositionBuffer(gl,2.0,2.0)
-            textureCoordBuffer = createTextureCoordBuffer()
-        }
+   
 
-        function getNextFrame(response) {
-            zProjection.texture.image.src = 'data:image/jpeg;base64,'+response.z_projection
-            xProjection.texture.image.src = 'data:image/jpeg;base64,'+response.x_projection
-            yProjection.texture.image.src = 'data:image/jpeg;base64,'+response.y_projection
-        }
-    
-        function drawScene() {
+        function drawScene(gl) {
             gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
+            gl.clearColor(0,0,0,0)
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+         
             var num_channels = 1
             if ($('#channel_select').val() == 'overlay') {
                 num_channels = 2
@@ -382,104 +455,156 @@
             var translate_y = g_frameViewer.mainProjectionHeight/2 + 0.35;
             var translate_x = g_frameViewer.mainProjectionWidth/2 + 0.35;
             var offset = g_frameViewer.offset;
-            gl.uniform1i(zProjection.shaderProgram.channelsUniform, num_channels)
-            gl.uniform1i(xProjection.shaderProgram.channelsUniform, num_channels)
-            gl.uniform1i(yProjection.shaderProgram.channelsUniform, num_channels)
+
+            gl.uniform1i(gl.shaderProgram.samplerUniform, 0)
+            gl.uniform1i(gl.shaderProgram.channelsUniform, num_channels)
 
             mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix)
-
             mat4.identity(mvMatrix)
-
             mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, g_frameViewer.zoomLevel])
+            setMatrixUniforms(gl)
+            
             gl.bindBuffer(gl.ARRAY_BUFFER, zProjection.vertexPositionBuffer)
-            gl.vertexAttribPointer(zProjection.shaderProgram.vertexPositionAttribute, 
+            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
                     zProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
-
             gl.bindBuffer(gl.ARRAY_BUFFER, zProjection.textureCoordBuffer)
-            gl.vertexAttribPointer(zProjection.shaderProgram.textureCoordAttribute, 
+            gl.vertexAttribPointer(gl.shaderProgram.textureCoordAttribute, 
                     zProjection.textureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0)
 
             gl.activeTexture(gl.TEXTURE0)
             gl.bindTexture(gl.TEXTURE_2D, zProjection.texture)
-            gl.uniform1i(zProjection.shaderProgram.samplerUniform, 0)
             
-            setMatrixUniforms()
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, zProjection.vertexPositionBuffer.numItems)
 
-            mat4.translate(mvMatrix, [translate_x, 0.0, 0.0])
-            gl.bindBuffer(gl.ARRAY_BUFFER, xProjection.vertexPositionBuffer)
-            gl.vertexAttribPointer(xProjection.shaderProgram.vertexPositionAttribute, 
-                    xProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
 
+            mat4.translate(mvMatrix, [translate_x, 0.0, 0.0])
+            setMatrixUniforms(gl)
+            gl.bindBuffer(gl.ARRAY_BUFFER, xProjection.vertexPositionBuffer)
+            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
+                    xProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
             gl.bindBuffer(gl.ARRAY_BUFFER, xProjection.textureCoordBuffer)
-            gl.vertexAttribPointer(xProjection.shaderProgram.textureCoordAttribute, 
+            gl.vertexAttribPointer(gl.shaderProgram.textureCoordAttribute, 
                     xProjection.textureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0)
 
             gl.activeTexture(gl.TEXTURE0)
             gl.bindTexture(gl.TEXTURE_2D, xProjection.texture)
-            gl.uniform1i(xProjection.shaderProgram.samplerUniform, 0)
 
-            setMatrixUniforms()
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, xProjection.vertexPositionBuffer.numItems)
 
-            mat4.translate(mvMatrix, [-translate_x, -translate_y, 0.0])
-            gl.bindBuffer(gl.ARRAY_BUFFER, yProjection.vertexPositionBuffer)
-            gl.vertexAttribPointer(yProjection.shaderProgram.vertexPositionAttribute, 
-                    yProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
 
+            mat4.translate(mvMatrix, [-translate_x, -translate_y, 0.0])
+            setMatrixUniforms(gl)
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, yProjection.vertexPositionBuffer)
+            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
+                    yProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
             gl.bindBuffer(gl.ARRAY_BUFFER, yProjection.textureCoordBuffer)
-            gl.vertexAttribPointer(yProjection.shaderProgram.textureCoordAttribute, 
+            gl.vertexAttribPointer(gl.shaderProgram.textureCoordAttribute, 
                     yProjection.textureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0)
 
             gl.activeTexture(gl.TEXTURE0)
             gl.bindTexture(gl.TEXTURE_2D, yProjection.texture)
-            gl.uniform1i(yProjection.shaderProgram.samplerUniform, 0)
             
-            setMatrixUniforms()
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
         }
 
-
         $("#gl_canvas").ready(function webGLStart (){
-            var gl_canvas = $('#gl_canvas');
-            g_frameViewer.initMouse(gl_canvas);
-
-            var canvas = gl_canvas[0];
-            gl = initGL(canvas);
+            frameContext = initGL($('#gl_canvas')[0]);
+            initShaders(frameContext, 'shader-fs')
             zProjection = {
-                shaderProgram: initShaders(),
                 vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(gl,2.0,2.0),
-                textureCoordBuffer: createTextureCoordBuffer(),
-                texture: gl.createTexture()
+                    createSquareVertexPositionBuffer(frameContext,2.0,2.0),
+                textureCoordBuffer: createTextureCoordBuffer(frameContext),
+                texture: frameContext.createTexture()
             }
             zProjection.texture.image = new Image()
 
             xProjection = {
-                shaderProgram: initShaders(),
                 vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(gl,0.5,2.0),
-                textureCoordBuffer: createTextureCoordBuffer(),
-                texture: gl.createTexture()
+                    createSquareVertexPositionBuffer(frameContext,0.5,2.0),
+                textureCoordBuffer: createTextureCoordBuffer(frameContext),
+                texture: frameContext.createTexture()
             }           
             xProjection.texture.image = new Image()
 
             yProjection = {
-                shaderProgram: initShaders(),
                 vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(gl,2.0,0.5),
-                textureCoordBuffer: createTextureCoordBuffer(),
-                texture: gl.createTexture()
+                    createSquareVertexPositionBuffer(frameContext,2.0,0.5),
+                textureCoordBuffer: createTextureCoordBuffer(frameContext),
+                texture: frameContext.createTexture()
             }           
             yProjection.texture.image = new Image()
 
             zProjection.texture.image.onload = function(){imageOnload()};
 
-            gl.clearColor(0.0, 0.0, 0.0, 1.0)
-            gl.enable(gl.DEPTH_TEST)
+            frameContext.clearColor(0.0, 0.0, 0.0, 1.0)
+            frameContext.enable(frameContext.DEPTH_TEST)
         });
 
-        
+             
+        function initShapeBuffers(gl) {
+            gl.triangleVertexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, gl.triangleVertexPositionBuffer);
+            var size = 0.25;
+            var vertices = [
+                 0.0,  size,  0.0,
+                -size, -size,  0.0,
+                 size, -size,  0.0
+            ];
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+            gl.triangleVertexPositionBuffer.itemSize = 3;
+            gl.triangleVertexPositionBuffer.numItems = 3;
+
+            gl.squareVertexPositionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, gl.squareVertexPositionBuffer);
+
+            size_x = g_frameViewer.mainProjectionWidth;
+            size_y = g_frameViewer.mainProjectionHeight;
+            z = 0;
+            var vertices2 = squarePositionVerticies(size_x, size_y, z)
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices2), gl.STATIC_DRAW);
+            gl.squareVertexPositionBuffer.itemSize = 3;
+            gl.squareVertexPositionBuffer.numItems = 4;
+        }
+
+
+        function drawShapes(gl) {
+            gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+            gl.clearColor(0, 0, 0, 0)
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            var offset = g_frameViewer.offset;
+            mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+            mat4.identity(mvMatrix);
+            mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, g_frameViewer.zoomLevel])
+    
+            var count = 0;
+            for (var roiBuffer in gl.buffers) {
+                gl.uniform1f(gl.shaderProgram.opacityUniform,$('#roi_slider').val()/100.0)
+                var color = gl.colors[roiBuffer];
+                gl.uniform3f(gl.shaderProgram.colorUniform,color.r/255,color.g/255,color.b/255)
+                gl.bindBuffer(gl.ARRAY_BUFFER, gl.buffers[roiBuffer]);
+                gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, gl.buffers[roiBuffer].itemSize, gl.FLOAT, false, 0, 0);
+                setMatrixUniforms(gl);
+                gl.drawArrays(gl.TRIANGLE_FAN, 0, gl.buffers[roiBuffer].numItems);
+
+                gl.uniform1f(gl.shaderProgram.opacityUniform,1.0)
+                gl.drawArrays(gl.LINE_LOOP, 0, gl.buffers[roiBuffer].numItems);
+            }
+        }
+
+        var roiContext;
+        $('#roi_canvas').ready(function roiGlStart () {
+            var roi_canvas = $('#roi_canvas');
+            g_frameViewer.initMouse(roi_canvas);
+            roiContext = initGL(roi_canvas[0]);
+            $('#roi_slider').val(25);
+            initShapeShaders(roiContext)
+            initShapeBuffers(roiContext);   
+            roiContext.enable(roiContext.DEPTH_TEST)
+            drawShapes(roiContext);
+        });
+       
         function playFramesFromQueue(forceStep) {
             var min = g_frameBuffer.keys[0]
             var max = g_frameBuffer.maxSortedIndex
@@ -493,7 +618,8 @@
                     if (g_frameBuffer.hasVolume()) {
                         $('#volume_button').addClass('loaded');
                     } else {
-                        $('#volume_button').removeClass('loaded');
+                        $('#volume_button').removeClass('loaded')
+                                           .removeClass('selected');
                     }
                     if(!$('#frame_slider').hasClass('moving')) {
                         $('#frame_slider').val(nextFrame)
@@ -526,11 +652,15 @@
             if (fetching) {
                 if (!g_frameBuffer.isFull()) {
                     var frames = g_frameBuffer.next_request(g_packetSize)
+                    if (frames.length <= 0) {
+                        fetching=false;
+                        return;
+                    }
                     $.ajax({
                         url: '{{ url_for('.getFrames', _external=True) }}',
                         type: 'POST',
                         data: {
-                            frames: frames.join(','),
+                            frames: frames,
                             path: g_filePath,
                             planes: [0],
                             frameDelta: g_frameBuffer.frameDelta,
@@ -546,13 +676,12 @@
 
                         $('#indicator').show()
                         $('#indicator').fadeOut(1000)
-
                         if (response.hasOwnProperty('frame_'+g_frameBuffer.next())) {
                             $('#buffering_warning').text('buffering... press start to resume playback')
                         }
                         
                         g_frameBuffer.addFrames(response)
-                   
+
                         $('#buff_min').text(g_frameBuffer.keys[0])
                         $('#buff_max').text(g_frameBuffer.maxSortedIndex)
                         $('#buff_curr').text(g_frameBuffer.current)
@@ -575,10 +704,10 @@
 
         //TODO: is it possible for z projection to finish loading before x and y?
        function imageOnload() {
-            updateTextureData(zProjection.texture)
-            updateTextureData(xProjection.texture)
-            updateTextureData(yProjection.texture)
-            drawScene()
+            updateTextureData(frameContext,zProjection.texture)
+            updateTextureData(frameContext, xProjection.texture)
+            updateTextureData(frameContext, yProjection.texture)
+            drawScene(frameContext)
             //
             //THIS IS FOR SAVING THE CANVAS AS PNG FILES
             //
@@ -625,47 +754,62 @@
            g_frameViewer.mainProjectionHeight = height;
            g_frameViewer.mainProjectionWidth = width;
 
-           zProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,height)
-           xProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,depth,height)
-           yProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,depth)
+           zProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(frameContext,width,height)
+           xProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(frameContext,depth,height)
+           yProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(frameContext,width,depth)
         }
         
         function fetchInfo(filePath) {
             $.ajax({
                 url: '{{ url_for('.getInfo', _external=True) }}',
                 type: 'POST',
+                cache: false,
                 data: {
                     path: filePath,
+                }
+            }).done(function(response) {
+                $('#indicator').show()
+                $('#indicator').fadeOut(1000)
+                response.channel = g_sequenceInfo.channel;
+                g_sequenceInfo=response,
+                $('#frame_num_label').text(g_sequenceInfo.max)  
+
+                if (response['channel_0']) {
+                $('#ch1_norm_input').val(response['channel_0'])
+                }
+
+                if (response['channel_1']) {
+                    $('#ch2_norm_input').removeClass('hidden');
+                    $('#ch2_norm_input').val(response['channel_1'])
+                } else {
+                    $('#ch2_norm_input').addClass('hidden');
+                }
+
+                fetching = true
+                resizeBuffers(response.width,response.height)
+                $('#frame_slider').attr('max',g_sequenceInfo.max)
+            });
+
+            $('label_select').prop('disabled', true);
+            $.ajax({
+                url: '{{ url_for('.getLabels', _external=True) }}',
+                type: 'POST',
+                data: {
+                    path: filePath
                 },
-                    cache: false,
-                }).done(function(response) {
-                    $('#indicator').show()
-                    $('#indicator').fadeOut(1000)
-                    response.channel = g_sequenceInfo.channel;
-                    g_sequenceInfo=response,
-                    $('#frame_num_label').text(g_sequenceInfo.max)  
-
-                    if (response['channel_0']) {
-                        $('#ch1_norm_input').val(response['channel_0'])
-                    }
-
-                    if (response['channel_1']) {
-                        $('#ch2_norm_input').removeClass('hidden');
-                        $('#ch2_norm_input').val(response['channel_1'])
-                    } else {
-                        $('#ch2_norm_input').addClass('hidden');
-                    }
-
-                    fetching = true
-                    resizeBuffers(response.width,response.height)
-                    $('#frame_slider').attr('max',g_sequenceInfo.max)
-                })
+                cache: false
+            }).done(function(html) {
+                $('#label_select').html('')
+                $('#label_select').html(html)
+                $('#label_select').prop('disabled', false);
+            });
         }
 
         function setSelectedData(newFrameIndex) {
             if (g_frameBuffer) {
                 g_frameBuffer.buffer = []
             }
+            clearRois();
             g_frameBuffer = new FrameBuffer(Date.now(),350)
             g_filePath = $('#file_input').val().trim()
             g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
@@ -677,19 +821,20 @@
             }
 
             if ($('#channel_select').val() == 'overlay') {
-                zProjection.textureCoordBuffer = createTextureCoordBuffer(2)
-                xProjection.textureCoordBuffer = createTextureCoordBuffer(2)
-                yProjection.textureCoordBuffer = createTextureCoordBuffer(2)
+                zProjection.textureCoordBuffer = createTextureCoordBuffer(frameContext, 2)
+                xProjection.textureCoordBuffer = createTextureCoordBuffer(frameContext, 2)
+                yProjection.textureCoordBuffer = createTextureCoordBuffer(frameContext, 2)
             } else {
-                zProjection.textureCoordBuffer = createTextureCoordBuffer(1)
-                xProjection.textureCoordBuffer = createTextureCoordBuffer(1)
-                yProjection.textureCoordBuffer = createTextureCoordBuffer(1)
+                zProjection.textureCoordBuffer = createTextureCoordBuffer(frameContext)
+                xProjection.textureCoordBuffer = createTextureCoordBuffer(frameContext)
+                yProjection.textureCoordBuffer = createTextureCoordBuffer(frameContext)
             }
 
             //$('#buff_min').text(g_frameBuffer.minKey)
             //$('#buff_max').text(g_frameBuffer.maxSortedIndex)
             $('#buff_curr').text(g_frameBuffer.current)
-            fetchFrames()
+            fetchFrame(-1);
+            fetchFrames();
         }
 
         function fileSelection(file) {
@@ -768,6 +913,7 @@
             }
         })
 
+
         $('#file_up_level').click(function() {
             var path = $('#file_input').val()
             if (path) {
@@ -780,6 +926,65 @@
             $('#load_box').addClass('hidden')
             $('#load_button').removeClass('selected')
         })
+
+
+        $('#roi_button').click(function() {
+             $('#roi_button').addClass('selected');
+             $('#roi_box').removeClass('hidden');
+        });
+
+        $('#roi_cancel').click(function() {
+            $('#roi_button').removeClass('selected');
+            $('#roi_box').addClass('hidden');
+        });
+
+        $('#roi_load_button').click(function() {
+            $('#roi_box').addClass('hidden')
+            $('#roi_button').removeClass('selected');
+            $.ajax({
+                url: '{{ url_for('.getRois', _external=True) }}',
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    label: $('#label_select').val()
+                }
+            }).done(function(response) {
+                roiContext.buffers = {};
+                var sq16 = Math.pow(16,2);
+                var bufferLength = Object.keys(response).length;
+                var count = 0;
+                roiContext.colors={}
+                for (var roiLabel in response) {
+                    var h = count*360.0/bufferLength
+                    var color = tinycolor({h:h, s:65, v:50}).toRgb();
+                    roiContext.colors[roiLabel] = color;
+                    count++;
+                    var coords = response[roiLabel];
+                    var fixedCoords = [];
+                    for (var i = 0; i < coords.length; i+=2) {
+                        var val = coords[i]*sq16+coords[i+1];
+                        if (i%4 == 0) {
+                            val *= g_frameViewer.mainProjectionWidth/g_sequenceInfo.width
+                            val -= g_frameViewer.mainProjectionWidth/2
+                            fixedCoords.push(val)
+                        } else {
+                            val = g_sequenceInfo.height-val;
+                            val *= g_frameViewer.mainProjectionHeight/g_sequenceInfo.height
+                            val -= g_frameViewer.mainProjectionHeight/2
+                            fixedCoords.push(val);
+                            fixedCoords.push(0.0);
+                        }
+                    }
+                    roiContext.buffers[roiLabel] = roiContext.createBuffer();
+                    roiContext.bindBuffer(roiContext.ARRAY_BUFFER, roiContext.buffers[roiLabel]);
+                    roiContext.bufferData(roiContext.ARRAY_BUFFER, new Float32Array(fixedCoords), roiContext.STATIC_DRAW);
+                    roiContext.buffers[roiLabel].itemSize = 3;
+                    roiContext.buffers[roiLabel].numItems = fixedCoords.length/3;
+                }
+                drawShapes(roiContext);
+            });
+        });
 
         $('#increase_step_button').click(function() {
             if (g_frameBuffer.frameDelta > 0) {
@@ -795,8 +1000,7 @@
                 fetching = true
                 fetchFrames()
             }
-
-        })
+        });
 
         $('#reduce_step_button').click(function() {
             if (g_frameBuffer.frameDelta < 0) {
@@ -815,7 +1019,6 @@
         })
 
         $('#single_step_button').click(function(){
-            $('#volume_button').removeClass('selected');
             g_plane = 0;
             var frameDelta = g_frameBuffer.frameDelta
             g_frameBuffer.set_frameDelta(Math.abs(g_frameBuffer.frameDelta))
@@ -824,7 +1027,6 @@
         })
 
         $('#single_reverse_button').click(function(){
-            $('#volume_button').removeClass('selected');
             g_plane = 0;
             var frameDelta = g_frameBuffer.frameDelta
             g_frameBuffer.set_frameDelta(-Math.abs(g_frameBuffer.frameDelta))
@@ -838,8 +1040,54 @@
 
         $('#frame_slider').mouseup(function() {
             $(this).removeClass('moving')
-            g_frameBuffer.set_next($('#frame_slider').val())
+            fetchFrame($('#frame_slider').val())
+
+        });
+
+        function fetchFrame(index) {
+            g_frameBuffer.set_next(index);
+            if (!g_frameBuffer.has_next()) {
+                $.ajax({
+                    url: '{{ url_for('.getFrames', _external=True) }}',
+                    type: 'POST',
+                    cache: false,
+                    data: {
+                        frames: [index],
+                        planes: [0],
+                        path: g_filePath,
+                        normingVal: g_normingVal,
+                        channel: g_sequenceInfo.channel,
+                        sequenceId: g_frameBuffer.sequenceId
+                    }
+                }).done(function(response) {
+                    if (response.sequenceId != g_frameBuffer.sequenceId) {
+                        return;
+                    }
+
+                    $('#indicator').show();
+                    $('#indicator').fadeOut(1000);
+
+                    g_frameBuffer.addFrames(response);
+                    playFramesFromQueue(true);
+               });
+           } else {
+                playFramesFromQueue(true);
+           }
+        }
+
+        function clearRois() {
+            roiContext.buffers = [];
+            drawShapes(roiContext);
+        }
+
+        $('#clear_rois_button').click(function() {
+            clearRois();
+        });
+
+        $('#roi_slider').on('input',function() {
+            drawShapes(roiContext);
         })
+
 
         function showPlane(plane) {
             var thisFrame = g_frameBuffer.popFrame(g_frameBuffer.current,plane);
@@ -847,6 +1095,7 @@
             yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y;
             zProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.z;
         }
+
 
         $('#volume_button').click(function() {
             if($('#volume_button').hasClass('selected')) {
@@ -866,15 +1115,15 @@
             $.ajax({
                 url: '{{ url_for('.getFrames', _external=True) }}',
                 type: 'POST',
+                cache: false,
                 data: {
-                    frames: g_frameBuffer.current,
+                    frames: [g_frameBuffer.current],
                     planes: g_sequenceInfo.planes,
                     path: g_filePath,
                     normingVal: g_normingVal,
                     channel: g_sequenceInfo.channel,
                     sequenceId: g_frameBuffer.sequenceId
-                },
-                cache: false,
+                }
             }).done(function(response) {
                 $('#volume_button').removeClass('loading');
                 if (typeof response["frame_"+g_frameBuffer.current] !== "undefined") {

@@ -60,7 +60,7 @@ function FrameBuffer(sequenceId,maxLength) {
         } else if (a_comp && !b_comp){
             return 1
         } else {
-            return (a-b)*delta
+            return (a-b)*Math.abs(delta)
         }
     }
     
@@ -142,6 +142,7 @@ function FrameBuffer(sequenceId,maxLength) {
             var infoarr = frame.split('_')
             if (infoarr[0] == 'frame') {
                 frames[frame].index = infoarr[1]
+                this.requested.splice(this.requested.indexOf(infoarr[1]),1)
                 if ((typeof this.buffer[infoarr[1]] === "undefined")) {
                     this.buffer[infoarr[1]] = [];
                 }
@@ -188,6 +189,9 @@ function FrameBuffer(sequenceId,maxLength) {
         var keys = Object.keys(this.buffer)
         
         while (requestQueue.length < numFrames) {
+            if (frame < -1) {
+                break;
+            }
             if ((!this.buffer[frame]) && (this.requested.indexOf(frame) == -1)) {
                 requestQueue.push(frame);
                 this.requested.push(frame);

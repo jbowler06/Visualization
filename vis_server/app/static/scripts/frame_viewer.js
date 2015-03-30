@@ -50,8 +50,9 @@ function FrameViewer() {
                 }
             }
             if (!play) {
-                drawScene();
+                drawScene(frameContext);
             }
+            drawShapes(roiContext)
         });
 
         gl_canvas.bind('mousedown',function(){
@@ -71,8 +72,9 @@ function FrameViewer() {
                 thisViewer.offset.y -= dy/dragScale;
 
                 if (!play) {
-                    drawScene();
+                    drawScene(frameContext);
                 }
+                drawShapes(roiContext);
             }
             mouseState.lastMouseX = event.clientX;
             mouseState.lastMouseY = event.clientY;
