@@ -816,7 +816,7 @@
             });
         }
 
-        function setSelectedData(newFrameIndex) {
+        function setSelectedData() {
             if (g_frameBuffer) {
                 g_frameBuffer.buffer = []
             }
@@ -844,7 +844,12 @@
             //$('#buff_min').text(g_frameBuffer.minKey)
             //$('#buff_max').text(g_frameBuffer.maxSortedIndex)
             $('#buff_curr').text(g_frameBuffer.current)
-            fetchFrame(-1);
+
+            if (g_filePath.slice(-4) == 'sima') {
+                fetchFrame(-1);
+            } else {
+                fetchFrame(0);
+            }
             fetchFrames();
         }
 
