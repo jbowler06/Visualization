@@ -241,6 +241,13 @@
                 <div class="button smallButton floatLeft" id="roi_load_button"><span>go</span></div>
                 <div class="button smallButton floatRight" id="roi_cancel"><span>X</span></div>
             </p>
+            <p>roi type:</p>
+            <p>
+                <select id="roi_type_select">
+                    <option val="polygons">polygons</option>
+                    <option val="projections">projections</option>
+                </select>
+            </p>
             <p>shading:</p>
             <p>
                 <input type="range" name="roi_slider" id="roi_slider" min="0" max="100" value="0">
@@ -816,7 +823,7 @@
             });
         }
 
-        function setSelectedData(newFrameIndex) {
+        function setSelectedData() {
             if (g_frameBuffer) {
                 g_frameBuffer.buffer = []
             }
@@ -844,7 +851,12 @@
             //$('#buff_min').text(g_frameBuffer.minKey)
             //$('#buff_max').text(g_frameBuffer.maxSortedIndex)
             $('#buff_curr').text(g_frameBuffer.current)
-            fetchFrame(-1);
+
+            if (g_filePath.slice(-4) == 'sima') {
+                fetchFrame(-1);
+            } else {
+                fetchFrame(0);
+            }
             fetchFrames();
         }
 
@@ -952,26 +964,51 @@
         $('#roi_load_button').click(function() {
             $('#roi_box').addClass('hidden')
             $('#roi_button').removeClass('selected');
-            $.ajax({
-                url: '{{ url_for('.getRois', _external=True) }}',
-                type: 'POST',
-                cache: false,
-                data: {
-                    path: g_filePath,
-                    label: $('#label_select').val()
-                }
-            }).done(function(response) {
-                roiContext.rois = {};
-                var bufferLength = Object.keys(response).length;
-                var roiLabels = Object.keys(response);
-                for (var i=0; i<roiLabels.length; i++) {
-                    var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
-                    var newRoi = new roi(roiLabels[i],color);
-                    newRoi.setPoints(response[roiLabels[i]]);
-                    roiContext.rois[roiLabels[i]] = newRoi;
-                }
-                drawShapes(roiContext);
-            });
+            var type = $('#roi_type_select').val();
+            if (type == "polygons") {
+                $.ajax({
+                    url: '{{ url_for('.getRois', _external=True) }}',
+                    type: 'POST',
+                    cache: false,
+                    data: {
+                        path: g_filePath,
+                        label: $('#label_select').val()
+                    }
+                }).done(function(response) {
+                    roiContext.rois = {};
+                    var bufferLength = Object.keys(response).length;
+                    var roiLabels = Object.keys(response);
+                    for (var i=0; i<roiLabels.length; i++) {
+                        var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
+                        var newRoi = new roi(roiLabels[i],color);
+                        newRoi.setPoints(response[roiLabels[i]]);
+                        roiContext.rois[roiLabels[i]] = newRoi;
+                    }
+                    drawShapes(roiContext);
+                });
+            } else {
+                $.ajax({
+                    url: '{{ url_for('.getRoiMasks', _external=True) }}',
+                    type: 'POST',
+                    cache: false,
+                    data: {
+                        path: g_filePath,
+                        label: $('#label_select').val()
+                    }
+                }).done(function(response) {
+                    roiContext.rois = {};
+                    var bufferLength = Object.keys(response).length;
+                    var roiLabels = Object.keys(response);
+                    for (var i=0; i<roiLabels.length; i++) {
+                        var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
+                        var newRoi = new roi(roiLabels[i],color);
+                        newRoi.setPoints(response[roiLabels[i]]);
+                        roiContext.rois[roiLabels[i]] = newRoi;
+                    }
+                    drawShapes(roiContext);
+                });
+
+            }
         });
 
         $('#increase_step_button').click(function() {

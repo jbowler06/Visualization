@@ -148,7 +148,6 @@ def getRoiMasks():
     convertedRois = {}
     rois = dataset.ROIs[label]
     for roi in rois:
-
         break
     import pdb; pdb.set_trace()
     return
@@ -186,6 +185,7 @@ def getFrames():
     sequenceId = request.form.get('sequenceId')
     channel = request.form.get('channel')
     planes = request.form.getlist('planes[]',type=int)
+
     if planes is None:
         planes = [0]
 
@@ -211,12 +211,19 @@ def getFrames():
             end = True
             continue
         elif frame_number == -1 and ds is not None:
-            vol = ds.time_averages
-            for ch in xrange(vol.shape[3]):
-                subframe = vol[:,:,:,ch]
-                factor = np.percentile(subframe[np.where(np.isfinite(subframe))],99)
-                if np.isfinite(factor):
-                    norming_val[ch] = factor
+            try:
+                time_averages = pickle.load(open(os.path.join(ds.savedir, 'time_averages.pkl')))  
+                if not isinstance(time_averages,np.ndarray):
+                    raise Exception('no time average')
+            except:
+                vol = seq._get_frame(0)
+            else: 
+                vol = ds.time_averages
+                for ch in xrange(vol.shape[3]):
+                    subframe = vol[:,:,:,ch]
+                    factor = np.percentile(subframe[np.where(np.isfinite(subframe))],99)
+                    if np.isfinite(factor):
+                        norming_val[ch] = factor
         else:
             vol = seq._get_frame(frame_number)
 

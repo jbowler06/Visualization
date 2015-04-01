@@ -1,7 +1,7 @@
 function FrameBuffer(sequenceId,maxLength) {
     this.maxLength = maxLength
     this.frameDelta = 1
-    this.current = -1
+    this.current = 0
     this.buffer = {}
     this.keys = []
     this.requested = []
