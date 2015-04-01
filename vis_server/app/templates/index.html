@@ -79,7 +79,7 @@
         .button span {
             text-height:20px;
         }
-        .button:hover {
+        .button:hover, #frame_number_span:hover {
             background-color: #555;
             cursor: pointer;
         }
@@ -251,8 +251,16 @@
         </div>
         <div class="button" id="start_button"><span>start</span></div>
         <div class="button" id="stop_button"><span>stop</span></div>
+        <div class="loadBox hidden" id="goto_box">
+            <p>go to:</p>
+            <p style="width:auto;margin:0px 5px">
+                <input type="text" id="goto_frame_input" class="textInput floatLeft">
+                <div class="button smallButton floatLeft" id="goto_frame_button"><span>go</span></div>
+                <div class="button smallButton floatRight" id="goto_cancel_button"><span>X</span></div>
+            </p>
+        </div>
         <div class="largeLabel" id="frame_number_label">
-            <span>
+            <span id="frame_number_span">
                 <span id="this_frame_label">0</span>/<span id="frame_num_label">0</span>
             </span>
         </div>
@@ -1020,7 +1028,6 @@
         $('#frame_slider').mouseup(function() {
             $(this).removeClass('moving')
             fetchFrame($('#frame_slider').val())
-
         });
 
         function fetchFrame(index) {
@@ -1117,6 +1124,19 @@
 
                 g_frameBuffer.addFrames(response);
            });
+        });
+
+        $('#frame_number_span').click(function() {
+            $('#goto_box').removeClass('hidden');
+        });
+
+        $('#goto_cancel_button').click(function() {
+            $('#goto_box').addClass('hidden');
+        });
+
+        $('#goto_frame_button').click(function() {
+            fetchFrame($('#goto_frame_input').val()-1)
+            $('#goto_box').addClass('hidden');
         });
 
     </script>
