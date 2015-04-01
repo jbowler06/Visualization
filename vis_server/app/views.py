@@ -131,6 +131,28 @@ def convertToBin(arr):
     return (imageString, min_val)
 
 
+def convertToB64Jpeg(arr, quality=100):
+    img = Image.fromarray(arr,'L')
+    img_io = StringIO.StringIO()
+    img.save(img_io, 'jpeg', quality=quality)
+    img_io.seek(0)
+
+    return 'data:image/jpeg;base64,'+base64.b64encode(img_io.read())
+
+@app.route('/getRoiMasks', methods=['GET','POST'])
+def getRoiMasks():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')   
+    
+    dataset = ImagingDataset.load(ds_path)
+    convertedRois = {}
+    rois = dataset.ROIs[label]
+    for roi in rois:
+
+        break
+    import pdb; pdb.set_trace()
+    return
+
 @app.route('/getRois', methods=['GET','POST'])
 def getRois():
     ds_path = request.form.get('path')
@@ -212,35 +234,23 @@ def getFrames():
                 zsurf = np.nanmean(vol,axis=0)
             else:
                 zsurf = vol[plane-1,:,:]
-            img = Image.fromarray(zsurf.astype('uint8'),'L')
-            img_io_z = StringIO.StringIO()
-            img.save(img_io_z, 'jpeg', quality=quality)
-            img_io_z.seek(0)
 
             if plane == 0:
                 ysurf = np.nanmean(vol,axis=1)
             else:
                 ysurf = np.zeros((vol.shape[0],vol.shape[2]))
                 ysurf[plane-1,:]=np.nanmean(zsurf,axis=0)
-            img = Image.fromarray(ysurf.astype('uint8'),'L')
-            img_io_y = StringIO.StringIO()
-            img.save(img_io_y, 'jpeg', quality=quality)
-            img_io_y.seek(0)
 
             if plane == 0:
                 xsurf = np.nanmean(vol,axis=2).T
             else:
                 xsurf = np.zeros((vol.shape[1],vol.shape[0]))
                 xsurf[:,plane-1]=np.nanmean(zsurf,axis=1).T
-            img = Image.fromarray(xsurf.astype('uint8'),'L')
-            img_io_x = StringIO.StringIO()
-            img.save(img_io_x, 'jpeg', quality=quality)
-            img_io_x.seek(0)
             
             frames['frame_'+str(frame_number)][plane] = {
-                'z':base64.b64encode(img_io_z.read()),
-                'y':base64.b64encode(img_io_y.read()),
-                'x':base64.b64encode(img_io_x.read())
+                'z':convertToB64Jpeg(zsurf.astype('uint8'),quality=quality),
+                'y':convertToB64Jpeg(ysurf.astype('uint8'),quality=quality),
+                'x':convertToB64Jpeg(xsurf.astype('uint8'),quality=quality)
             }
 
     return jsonify(end=end,sequenceId=sequenceId,**frames)

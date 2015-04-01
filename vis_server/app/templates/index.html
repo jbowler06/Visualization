@@ -206,7 +206,7 @@
             </div>
             <p style="width:auto;margin:0px 5px">
                 <select class="floatLeft" id="channel_select"></select>
-                <div class="button smallButton floatLeft" id="load_dataset_button"><span>ok</span></div>
+                <div class="button smallButton floatLeft hidden" id="load_dataset_button"><span>ok</span></div>
             </p>
 
          </div>
@@ -635,9 +635,9 @@
                         $('#frame_slider').val(nextFrame)
                     }
                     if (!thisFrame) debugger;
-                    xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x
-                    yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y
-                    zProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.z
+                    xProjection.texture.image.src = ''+thisFrame.x
+                    yProjection.texture.image.src = ''+thisFrame.y
+                    zProjection.texture.image.src = ''+thisFrame.z
                     $('#this_frame_label').text(parseInt(nextFrame)+1)
                     setTimeout(function(){playFramesFromQueue()}, g_frameViewer.frameDelay)
 
@@ -798,6 +798,7 @@
                 fetching = true
                 resizeBuffers(response.width,response.height)
                 $('#frame_slider').attr('max',g_sequenceInfo.max)
+                $('#load_dataset_button').removeClass('hidden');
             });
 
             $('label_select').prop('disabled', true);
@@ -848,6 +849,7 @@
         }
 
         function fileSelection(file) {
+            $('#load_dataset_button').addClass('hidden')
             var fullPath = $('#file_input').val().trim();
             if (!fullPath) {
                 fullPath = '/'
@@ -936,7 +938,6 @@
             $('#load_box').addClass('hidden')
             $('#load_button').removeClass('selected')
         })
-
 
         $('#roi_button').click(function() {
              $('#roi_button').addClass('selected');
@@ -1077,9 +1078,9 @@
 
         function showPlane(plane) {
             var thisFrame = g_frameBuffer.popFrame(g_frameBuffer.current,plane);
-            xProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.x;
-            yProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.y;
-            zProjection.texture.image.src = 'data:image/jpeg;base64,'+thisFrame.z;
+            xProjection.texture.image.src = ''+thisFrame.x;
+            yProjection.texture.image.src = ''+thisFrame.y;
+            zProjection.texture.image.src = ''+thisFrame.z;
         }
 
 
