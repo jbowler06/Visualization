@@ -22,10 +22,10 @@
             top: 0px;
         }
         #gl_canvas {
-            border: thin solid #0F0;
+           /* border: thin solid #0F0;*/
         }
         #roi_canvas {
-            border: thin solid #F00;
+           /* border: thin solid #F00;*/
         }   
         .floatLeft {
             float: Left;
@@ -296,6 +296,8 @@
         src="{{ url_for('static', filename='scripts/frame_viewer.js') }}"></script>
     <script type="text/javascript" 
         src="{{ url_for('static', filename='scripts/tinycolor.js') }}"></script>
+    <script type="text/javascript" 
+        src="{{ url_for('static', filename='scripts/roi.js') }}"></script>
 
 
     <script id="shape-shader-fs" type="x-shader/x-fragment">
@@ -578,18 +580,18 @@
             mat4.identity(mvMatrix);
             mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, g_frameViewer.zoomLevel])
     
-            var count = 0;
-            for (var roiBuffer in gl.buffers) {
+            for (var roiLabel in gl.rois) {
+                var thisRoi = gl.rois[roiLabel];
                 gl.uniform1f(gl.shaderProgram.opacityUniform,$('#roi_slider').val()/100.0)
-                var color = gl.colors[roiBuffer];
+                var color = thisRoi.color;
                 gl.uniform3f(gl.shaderProgram.colorUniform,color.r/255,color.g/255,color.b/255)
-                gl.bindBuffer(gl.ARRAY_BUFFER, gl.buffers[roiBuffer]);
-                gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, gl.buffers[roiBuffer].itemSize, gl.FLOAT, false, 0, 0);
+                gl.bindBuffer(gl.ARRAY_BUFFER, thisRoi.glBuffer);
+                gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, thisRoi.glBuffer.itemSize, gl.FLOAT, false, 0, 0);
                 setMatrixUniforms(gl);
-                gl.drawArrays(gl.TRIANGLE_FAN, 0, gl.buffers[roiBuffer].numItems);
+                gl.drawArrays(gl.TRIANGLE_FAN, 0, thisRoi.glBuffer.numItems);
 
                 gl.uniform1f(gl.shaderProgram.opacityUniform,1.0)
-                gl.drawArrays(gl.LINE_LOOP, 0, gl.buffers[roiBuffer].numItems);
+                gl.drawArrays(gl.LINE_LOOP, 0, thisRoi.glBuffer.numItems);
             }
         }
 
@@ -950,37 +952,14 @@
                     label: $('#label_select').val()
                 }
             }).done(function(response) {
-                roiContext.buffers = {};
-                var sq16 = Math.pow(16,2);
+                roiContext.rois = {};
                 var bufferLength = Object.keys(response).length;
-                var count = 0;
-                roiContext.colors={}
-                for (var roiLabel in response) {
-                    var h = count*360.0/bufferLength
-                    var color = tinycolor({h:h, s:65, v:50}).toRgb();
-                    roiContext.colors[roiLabel] = color;
-                    count++;
-                    var coords = response[roiLabel];
-                    var fixedCoords = [];
-                    for (var i = 0; i < coords.length; i+=2) {
-                        var val = coords[i]*sq16+coords[i+1];
-                        if (i%4 == 0) {
-                            val *= g_frameViewer.mainProjectionWidth/g_sequenceInfo.width
-                            val -= g_frameViewer.mainProjectionWidth/2
-                            fixedCoords.push(val)
-                        } else {
-                            val = g_sequenceInfo.height-val;
-                            val *= g_frameViewer.mainProjectionHeight/g_sequenceInfo.height
-                            val -= g_frameViewer.mainProjectionHeight/2
-                            fixedCoords.push(val);
-                            fixedCoords.push(0.0);
-                        }
-                    }
-                    roiContext.buffers[roiLabel] = roiContext.createBuffer();
-                    roiContext.bindBuffer(roiContext.ARRAY_BUFFER, roiContext.buffers[roiLabel]);
-                    roiContext.bufferData(roiContext.ARRAY_BUFFER, new Float32Array(fixedCoords), roiContext.STATIC_DRAW);
-                    roiContext.buffers[roiLabel].itemSize = 3;
-                    roiContext.buffers[roiLabel].numItems = fixedCoords.length/3;
+                var roiLabels = Object.keys(response);
+                for (var i=0; i<roiLabels.length; i++) {
+                    var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
+                    var newRoi = new roi(roiLabels[i],color);
+                    newRoi.setPoints(response[roiLabels[i]]);
+                    roiContext.rois[roiLabels[i]] = newRoi;
                 }
                 drawShapes(roiContext);
             });
@@ -1076,7 +1055,7 @@
         }
 
         function clearRois() {
-            roiContext.buffers = [];
+            roiContext.rois = {};
             drawShapes(roiContext);
         }
 

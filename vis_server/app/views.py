@@ -117,6 +117,8 @@ def getLabels():
 
 
 def convertToBin(arr):
+    min_val = np.min(arr)
+    arr+=min_val
     dat = arr.reshape((1,arr.shape[0]))
 
     img = Image.fromarray(dat.astype('uint8'),'L')
@@ -126,7 +128,7 @@ def convertToBin(arr):
 
     imageString = "data:image/png;base64,"+base64.b64encode(strBuffer.read())
 
-    return (imageString)
+    return (imageString, min_val)
 
 
 @app.route('/getRois', methods=['GET','POST'])
@@ -142,14 +144,17 @@ def getRois():
         coords = []
         
         for x,y in zip(*poly.exterior.coords.xy):
-            coords += [np.max((0,x)), np.max((0,y))]
-            
-        try:
-            convertedRois[roi.label] = convertList16(coords)
-        except:
-            import pdb; pdb.set_trace()
+            coords += [int(x),int(y)]
+
+        #stringBuffer,min_val = convertToBin(np.array(convertList16(coords)))
+        #convertedRois[roi.label] = {'points': stringBuffer,
+        #                            'min_val': min_val,
+        #                            'length': len(coords)*2}
+        convertedRois[roi.label] = coords
 
     return jsonify(**convertedRois)
+
+
 
 @app.route('/getFrames', methods=['GET','POST'])
 def getFrames():
@@ -185,12 +190,11 @@ def getFrames():
             continue
         elif frame_number == -1 and ds is not None:
             vol = ds.time_averages
-            for channel in xrange(vol.shape[3]):
-                subframe = vol[:,:,:,channel]
-                factor = np.nanmax(subframe)
+            for ch in xrange(vol.shape[3]):
+                subframe = vol[:,:,:,ch]
+                factor = np.percentile(subframe[np.where(np.isfinite(subframe))],99)
                 if np.isfinite(factor):
-                    norming_val[channel] = factor
-            end = True
+                    norming_val[ch] = factor
         else:
             vol = seq._get_frame(frame_number)
 
