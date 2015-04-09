@@ -59,7 +59,8 @@ function updateTextureData(ctx,texture) {
     ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_S, ctx.CLAMP_TO_EDGE)
     ctx.texParameteri(ctx.TEXTURE_2D, ctx.TEXTURE_WRAP_T, ctx.CLAMP_TO_EDGE)
     //gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, data.width, data.height-2, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, new Uint8Array(data.texture) )
-    ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.LUMINANCE, ctx.LUMINANCE, ctx.UNSIGNED_BYTE, texture.image )
+    //ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.LUMINANCE, ctx.LUMINANCE, ctx.UNSIGNED_BYTE, texture.image )
+    ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGB, ctx.RGB, ctx.UNSIGNED_BYTE, texture.image )
     ctx.bindTexture(ctx.TEXTURE_2D, null)
 }
 

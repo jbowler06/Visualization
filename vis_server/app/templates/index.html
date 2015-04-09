@@ -149,8 +149,11 @@
         .loadBox td {
             padding: 5px 15px;
         }
-        .loadBox table input{
+        .loadBox table input {
             width: 75px;
+        }
+        .loadBox table select {
+            min-width: 150px;
         }
         input.norming_value_input{
             width: 75px;
@@ -175,6 +178,9 @@
         }
         #volume_button.loaded:hover {
             color: #555;
+        }
+        #plane_select{
+            width:133px;
         }
     </style>
 
@@ -235,29 +241,56 @@
         </div>
         <div class="button" id="roi_button"><span>rois</span><br/><span><small>(2D only)</small></span></div>
         <div class="loadBox hidden" id="roi_box">
-            <p>rois label:</p>
             <p style="width:auto;margin:0px 5px">
-                <select id="label_select"></select>
-                <div class="button smallButton floatLeft" id="roi_load_button"><span>go</span></div>
+                <table class="floatLeft">
+                    <tr>
+                        <td>rois label:</td>
+                        <td>
+                            <select id="label_select"></select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>roi type:</td>
+                        <td>
+                            <select id="roi_type_select">
+                                <option val="polygons">polygons</option>
+                                <option val="projections">projections</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>shading:</td>
+                    <tr>
+                    <tr>
+                        <td colspan="2">
+                            <input type="range" 
+                                   name="roi_slider" 
+                                   id="roi_slider" 
+                                   min="0" 
+                                   max="100" 
+                                   value="0"
+                                   style="width:100%">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="button floatLeft" id="roi_load_button"><span>load</span></div>
+                        </td>
+                        <td>
+                            <div class="button floatLeft" id="clear_rois_button"><span>clear</span></div>
+                        </td>
+                    </tr>
+                </table>
                 <div class="button smallButton floatRight" id="roi_cancel"><span>X</span></div>
-            </p>
-            <p>roi type:</p>
-            <p>
-                <select id="roi_type_select">
-                    <option val="polygons">polygons</option>
-                    <option val="projections">projections</option>
-                </select>
-            </p>
-            <p>shading:</p>
-            <p>
-                <input type="range" name="roi_slider" id="roi_slider" min="0" max="100" value="0">
-            </p>
-            <p>
-                <div class="button floatLeft" id="clear_rois_button"><span>clear</span></div>
             </p>
         </div>
         <div class="button" id="start_button"><span>start</span></div>
         <div class="button" id="stop_button"><span>stop</span></div>
+        <div>
+            <select id="plane_select">
+                <option val="0">0</option>
+            </select>
+        </div>
         <div class="loadBox hidden" id="goto_box">
             <p>go to:</p>
             <p style="width:auto;margin:0px 5px">
@@ -276,8 +309,8 @@
         <div><input type="range" name="frame_slider" id="frame_slider" min="0" max="100" value="0"></div>
         
         <div>
-            <div class="button halfButton floatLeft" id="single_reverse_button"><span>&#60;</span></div>
-            <div class="button halfButton floatLeft" id="single_step_button"><span>&#62;</span></div>
+            <div class="button halfButton floatLeft stepButton" id="single_reverse_button"><span>&#60;</span></div>
+            <div class="button halfButton floatLeft stepButton" id="single_step_button"><span>&#62;</span></div>
         </div>
         <div>
             <div class="button halfButton floatLeft slim" id="reduce_step_button"><span>&#60;&#60;</span></div>
@@ -296,6 +329,9 @@
             <canvas class="webGlCanvas" id="gl_canvas" width="800" height="700"></canvas>
             <canvas class="webGlCanvas" id="roi_canvas" width="800" height="700"></canvas>
             <div class="button smallButton" id="volume_button" style="position:absolute; top:0px; right:0px;">V</div>
+            <div class="button smallButton" id="scroll_in_button" style="position:absolute; top:29px; right:0px;">&#43;</div>
+            <div class="button smallButton" id="scroll_out_button" style="position:absolute; top:58px; right:0px;">&#45;</div>
+            <div class="button smallButton hidden" id="roi_mode_button" style="position:absolute; margin-top:670px; right:0px;">R</div>
         </div>
     </div>
 
@@ -343,11 +379,20 @@
         varying vec2 vTextureCoord;
         uniform sampler2D uSampler;
         uniform int num_channels;
+        uniform float roiOpacity;
         
         void main(void) {
             if (num_channels == 1) {
                 vec4 myTex = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-                gl_FragColor = vec4(myTex.rgb, 1.0);
+                if (roiOpacity != 0.0) {
+                    float opacity = myTex.b+myTex.r+myTex.g;
+                    gl_FragColor = vec4(myTex.r-myTex.r*roiOpacity,
+                                        myTex.g-myTex.g*roiOpacity,
+                                        myTex.b-myTex.b*roiOpacity,
+                                        opacity*(1.0-roiOpacity));
+                } else {
+                    gl_FragColor = vec4(myTex.rgb, 1.0);
+                }
             } else {
                 vec4 channel1 = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t + 0.5));
                 vec4 channel2 = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
@@ -378,14 +423,9 @@
         var frameContext
         var roiGl
 
-        var zProjection
-        var xProjection
-        var yProjection
         var g_frameBuffer
         var g_volumeBuffer = [];
         var g_filePath
-        var g_plane = 0;
-        var g_frameDelta = 1
         var g_packetSize = 8
         var g_normingVal = {'0':0,'1':0}
         var g_frameViewer = new FrameViewer();
@@ -447,6 +487,7 @@
             shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler")
 
             shaderProgram.channelsUniform = gl.getUniformLocation(shaderProgram, "num_channels")
+            shaderProgram.roiOpacity = gl.getUniformLocation(shaderProgram, "roiOpacity")
             gl.shaderProgram = shaderProgram
         }
 
@@ -463,6 +504,9 @@
             gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
             gl.clearColor(0,0,0,0)
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+            var zProjection = gl.projections.zProjection;
+            var xProjection = gl.projections.xProjection;
+            var yProjection = gl.projections.yProjection;
          
             var num_channels = 1
             if ($('#channel_select').val() == 'overlay') {
@@ -475,6 +519,11 @@
 
             gl.uniform1i(gl.shaderProgram.samplerUniform, 0)
             gl.uniform1i(gl.shaderProgram.channelsUniform, num_channels)
+            if (gl.canvas==$('#gl_canvas')[0]) {
+                gl.uniform1f(gl.shaderProgram.roiOpacity, 0)
+            } else {
+                gl.uniform1f(gl.shaderProgram.roiOpacity, 1.01-$('#roi_slider').val()/100.0)
+            }
 
             mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix)
             mat4.identity(mvMatrix)
@@ -525,64 +574,48 @@
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
         }
 
-        $("#gl_canvas").ready(function webGLStart (){
-            frameContext = initGL($('#gl_canvas')[0]);
-            initShaders(frameContext, 'shader-fs')
-            zProjection = {
+        function createProjectionContext(canvas_id) {
+            var gl = initGL($(canvas_id)[0]);
+            gl.render = function() {drawScene(this)};
+            initShaders(gl, 'shader-fs')
+            gl.projections = {}
+
+            gl.projections.zProjection = {
                 vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(frameContext,2.0,2.0),
-                textureCoordBuffer: createTextureCoordBuffer(frameContext),
-                texture: frameContext.createTexture()
+                    createSquareVertexPositionBuffer(gl,2.0,2.0),
+                textureCoordBuffer: createTextureCoordBuffer(gl),
+                texture: gl.createTexture()
             }
-            zProjection.texture.image = new Image()
+            gl.projections.zProjection.texture.image = new Image()
 
-            xProjection = {
+            gl.projections.xProjection = {
                 vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(frameContext,0.5,2.0),
-                textureCoordBuffer: createTextureCoordBuffer(frameContext),
-                texture: frameContext.createTexture()
+                    createSquareVertexPositionBuffer(gl,0.5,2.0),
+                textureCoordBuffer: createTextureCoordBuffer(gl),
+                texture: gl.createTexture()
             }           
-            xProjection.texture.image = new Image()
+            gl.projections.xProjection.texture.image = new Image()
 
-            yProjection = {
+            gl.projections.yProjection = {
                 vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(frameContext,2.0,0.5),
-                textureCoordBuffer: createTextureCoordBuffer(frameContext),
-                texture: frameContext.createTexture()
+                    createSquareVertexPositionBuffer(gl,2.0,0.5),
+                textureCoordBuffer: createTextureCoordBuffer(gl),
+                texture: gl.createTexture()
             }           
-            yProjection.texture.image = new Image()
+            gl.projections.yProjection.texture.image = new Image()
 
-            zProjection.texture.image.onload = function(){imageOnload()};
+            gl.projections.zProjection.texture.image.onload = function(){imageOnload(gl)};
 
-            frameContext.clearColor(0.0, 0.0, 0.0, 1.0)
-            frameContext.enable(frameContext.DEPTH_TEST)
-        });
+            gl.clearColor(0.0, 0.0, 0.0, 1.0)
+            gl.enable(gl.DEPTH_TEST)
 
-             
-        function initShapeBuffers(gl) {
-            gl.triangleVertexPositionBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, gl.triangleVertexPositionBuffer);
-            var size = 0.25;
-            var vertices = [
-                 0.0,  size,  0.0,
-                -size, -size,  0.0,
-                 size, -size,  0.0
-            ];
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-            gl.triangleVertexPositionBuffer.itemSize = 3;
-            gl.triangleVertexPositionBuffer.numItems = 3;
-
-            gl.squareVertexPositionBuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, gl.squareVertexPositionBuffer);
-
-            size_x = g_frameViewer.mainProjectionWidth;
-            size_y = g_frameViewer.mainProjectionHeight;
-            z = 0;
-            var vertices2 = squarePositionVerticies(size_x, size_y, z)
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices2), gl.STATIC_DRAW);
-            gl.squareVertexPositionBuffer.itemSize = 3;
-            gl.squareVertexPositionBuffer.numItems = 4;
+            return gl;
         }
+
+        $("#gl_canvas").ready(function webGLStart (){
+            frameContext = createProjectionContext('#gl_canvas');
+            frameContext.frameViewer = true;
+        });
 
 
         function drawShapes(gl) {
@@ -610,17 +643,18 @@
             }
         }
 
-        var roiContext;
-        $('#roi_canvas').ready(function roiGlStart () {
+        var roiContext = createRoiContext();
+        function createRoiContext() {
             var roi_canvas = $('#roi_canvas');
             g_frameViewer.initMouse(roi_canvas);
-            roiContext = initGL(roi_canvas[0]);
+            var gl  = initGL(roi_canvas[0]);
             $('#roi_slider').val(25);
-            initShapeShaders(roiContext)
-            initShapeBuffers(roiContext);   
-            roiContext.enable(roiContext.DEPTH_TEST)
-            drawShapes(roiContext);
-        });
+            initShapeShaders(gl);
+            gl.enable(gl.DEPTH_TEST)
+            gl.render = function(){drawShapes(this)};
+
+            return gl;
+        }
        
         function playFramesFromQueue(forceStep) {
             var min = g_frameBuffer.keys[0]
@@ -628,10 +662,11 @@
             $('#buff_min').text(g_frameBuffer.keys[0])
             $('#buff_max').text(g_frameBuffer.maxSortedIndex)
             var nextFrame = g_frameBuffer.next()
-            if (g_frameBuffer.has_next()) {
+            if (g_frameBuffer.has_next($('#plane_select').val())) {
                 if (g_frameViewer.isPlaying() || forceStep) {
                     $('#buff_curr').text(nextFrame)
-                    var thisFrame = g_frameBuffer.popFrame(nextFrame)
+                    g_frameViewer.current = nextFrame;
+                    var thisFrame = g_frameBuffer.popFrame(nextFrame,g_frameViewer.getCurrentPlane())
                     if (g_frameBuffer.hasVolume()) {
                         $('#volume_button').addClass('loaded');
                     } else {
@@ -642,9 +677,9 @@
                         $('#frame_slider').val(nextFrame)
                     }
                     if (!thisFrame) debugger;
-                    xProjection.texture.image.src = ''+thisFrame.x
-                    yProjection.texture.image.src = ''+thisFrame.y
-                    zProjection.texture.image.src = ''+thisFrame.z
+                    frameContext.projections.xProjection.texture.image.src = ''+thisFrame.x
+                    frameContext.projections.yProjection.texture.image.src = ''+thisFrame.y
+                    frameContext.projections.zProjection.texture.image.src = ''+thisFrame.z
                     $('#this_frame_label').text(parseInt(nextFrame)+1)
                     setTimeout(function(){playFramesFromQueue()}, g_frameViewer.frameDelay)
 
@@ -668,7 +703,7 @@
         function fetchFrames() {
             if (fetching) {
                 if (!g_frameBuffer.isFull()) {
-                    var frames = g_frameBuffer.next_request(g_packetSize)
+                    var frames = g_frameBuffer.next_request(g_packetSize,g_frameViewer.getCurrentPlane())
                     if (frames.length <= 0) {
                         fetching=false;
                         return;
@@ -679,7 +714,7 @@
                         data: {
                             frames: frames,
                             path: g_filePath,
-                            planes: [0],
+                            planes: [$('#plane_select').val()],
                             frameDelta: g_frameBuffer.frameDelta,
                             normingVal: g_normingVal,
                             channel: g_sequenceInfo.channel,
@@ -720,11 +755,12 @@
         }
 
         //TODO: is it possible for z projection to finish loading before x and y?
-       function imageOnload() {
-            updateTextureData(frameContext,zProjection.texture)
-            updateTextureData(frameContext, xProjection.texture)
-            updateTextureData(frameContext, yProjection.texture)
-            drawScene(frameContext)
+       function imageOnload(context) {
+            updateTextureData(context, context.projections.zProjection.texture,true)
+            updateTextureData(context, context.projections.xProjection.texture,true)
+            updateTextureData(context, context.projections.yProjection.texture,true)
+            context.render();
+
             //
             //THIS IS FOR SAVING THE CANVAS AS PNG FILES
             //
@@ -744,7 +780,6 @@
         }
 
         $('#start_button').click(function() {
-            g_plane = 0;
             if (!g_frameViewer.isPlaying()) {
                 g_frameViewer.setPlaying(true)
                 playFramesFromQueue()
@@ -758,7 +793,10 @@
             g_frameViewer.setPlaying(false);
         })
 
-        function resizeBuffers(x,y,z) {
+        function resizeBuffers(gl,x,y,z) {
+            var zProjection = gl.projections.zProjection;
+            var xProjection = gl.projections.xProjection;
+            var yProjection = gl.projections.yProjection;
            depth = 0.5
            if (x < y) {
                 height = 2.0
@@ -771,9 +809,9 @@
            g_frameViewer.mainProjectionHeight = height;
            g_frameViewer.mainProjectionWidth = width;
 
-           zProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(frameContext,width,height)
-           xProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(frameContext,depth,height)
-           yProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(frameContext,width,depth)
+           zProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,height)
+           xProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,depth,height)
+           yProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,depth)
         }
         
         function fetchInfo(filePath) {
@@ -792,7 +830,7 @@
                 $('#frame_num_label').text(g_sequenceInfo.max)  
 
                 if (response['channel_0']) {
-                $('#ch1_norm_input').val(response['channel_0'])
+                    $('#ch1_norm_input').val(response['channel_0'])
                 }
 
                 if (response['channel_1']) {
@@ -803,12 +841,20 @@
                 }
 
                 fetching = true
-                resizeBuffers(response.width,response.height)
+                resizeBuffers(frameContext,response.width,response.height)
                 $('#frame_slider').attr('max',g_sequenceInfo.max)
                 $('#load_dataset_button').removeClass('hidden');
+
+                $('#plane_select').html('');
+                $('#plane_select').attr('max',Math.max.apply(null,response.planes))
+                $.each(response.planes, function(plane) {   
+                    $('#plane_select')
+                       .append($('<option>', { plane : plane })
+                       .text(plane)); 
+                   });
             });
 
-            $('label_select').prop('disabled', true);
+            $('#label_select').prop('disabled', true);
             $.ajax({
                 url: '{{ url_for('.getLabels', _external=True) }}',
                 type: 'POST',
@@ -824,11 +870,15 @@
         }
 
         function setSelectedData() {
+            var zProjection = frameContext.projections.zProjection;
+            var xProjection = frameContext.projections.xProjection;
+            var yProjection = frameContext.projections.yProjection;
             if (g_frameBuffer) {
                 g_frameBuffer.buffer = []
             }
             clearRois();
-            g_frameBuffer = new FrameBuffer(Date.now(),350)
+            g_frameBuffer = new FrameBuffer(Date.now(),350,g_sequenceInfo.planes)
+            g_frameBuffer.set_planes(g_sequenceInfo.planes);
             g_filePath = $('#file_input').val().trim()
             g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
             if (!g_normingVal) {
@@ -876,12 +926,12 @@
 
             if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
                 $('#channel_select').prop('disabled',true)
-                fetchInfo(fullPath)
                 $.get('{{ url_for('.getChannels',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
                     $('#channel_select').html('')
                     $('#channel_select').html(html)
                     $('#channel_select').prop('disabled', false);
-                })
+                });
+                fetchInfo(fullPath);
             } else {
                 $('#file_select').prop('disabled', true);
                 $.get('{{ url_for('.getFolders',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
@@ -961,13 +1011,30 @@
             $('#roi_box').addClass('hidden');
         });
 
+        function setRoiMask(roiLabel) {
+            thisRoi = roiContext.rois[roiLabel];
+            roiContext.current = roiLabel
+            roiContext.projections.xProjection.texture.image.src = thisRoi.x;
+            roiContext.projections.yProjection.texture.image.src = thisRoi.y;
+            roiContext.projections.zProjection.texture.image.src = thisRoi.z;
+        }
+
         $('#roi_load_button').click(function() {
-            $('#roi_box').addClass('hidden')
-            $('#roi_button').removeClass('selected');
+            var roiButton = $('#roi_button');
+            $('#roi_box').addClass('hidden');
+            roiButton.removeClass('selected');
+
+            var label = $('#label_select').val();
+            var url = '{{ url_for('.getRoiMasks', _external=True) }}';
+            if (label.match('^ica.*\.npz$|^opca.*\.npz')) {
+                $('#roi_type_select').val('projections');
+                var url = '{{ url_for('.getComponents', _external=True) }}';
+            }
             var type = $('#roi_type_select').val();
+
             if (type == "polygons") {
                 $.ajax({
-                    url: '{{ url_for('.getRois', _external=True) }}',
+                    url: url,
                     type: 'POST',
                     cache: false,
                     data: {
@@ -975,6 +1042,8 @@
                         label: $('#label_select').val()
                     }
                 }).done(function(response) {
+                    roiButton.html(roiButton.storeHtml);
+                    roiContext = createRoiContext()
                     roiContext.rois = {};
                     var bufferLength = Object.keys(response).length;
                     var roiLabels = Object.keys(response);
@@ -984,11 +1053,11 @@
                         newRoi.setPoints(response[roiLabels[i]]);
                         roiContext.rois[roiLabels[i]] = newRoi;
                     }
-                    drawShapes(roiContext);
+                    roiContext.render();
                 });
             } else {
                 $.ajax({
-                    url: '{{ url_for('.getRoiMasks', _external=True) }}',
+                    url: url,
                     type: 'POST',
                     cache: false,
                     data: {
@@ -996,16 +1065,12 @@
                         label: $('#label_select').val()
                     }
                 }).done(function(response) {
-                    roiContext.rois = {};
-                    var bufferLength = Object.keys(response).length;
-                    var roiLabels = Object.keys(response);
-                    for (var i=0; i<roiLabels.length; i++) {
-                        var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
-                        var newRoi = new roi(roiLabels[i],color);
-                        newRoi.setPoints(response[roiLabels[i]]);
-                        roiContext.rois[roiLabels[i]] = newRoi;
-                    }
-                    drawShapes(roiContext);
+                    roiContext = createProjectionContext('#roi_canvas');
+                    resizeBuffers(roiContext, g_sequenceInfo.width, g_sequenceInfo.height)
+                    roiContext.frameViewer = false;
+                    roiContext.rois = response;
+                    setRoiMask(Object.keys(response)[0]);
+                    $('#roi_mode_button').removeClass('hidden');
                 });
 
             }
@@ -1044,19 +1109,17 @@
         })
 
         $('#single_step_button').click(function(){
-            g_plane = 0;
-            var frameDelta = g_frameBuffer.frameDelta
-            g_frameBuffer.set_frameDelta(Math.abs(g_frameBuffer.frameDelta))
-            playFramesFromQueue(true)
-            g_frameBuffer.set_frameDelta(frameDelta)
+            if (!$(this).hasClass('selected')) {
+                $('.stepButton').addClass('selected');
+                fetchFrame(g_frameViewer.current + Math.abs(g_frameBuffer.frameDelta))
+            }
         })
 
         $('#single_reverse_button').click(function(){
-            g_plane = 0;
-            var frameDelta = g_frameBuffer.frameDelta
-            g_frameBuffer.set_frameDelta(-Math.abs(g_frameBuffer.frameDelta))
-            playFramesFromQueue(true)
-            g_frameBuffer.set_frameDelta(frameDelta)
+            if (!$(this).hasClass('selected')) {
+                $('.stepButton').addClass('selected');
+                fetchFrame(g_frameViewer.current - Math.abs(g_frameBuffer.frameDelta))
+            }
         })
         
         $('#frame_slider').mousedown(function() {
@@ -1070,14 +1133,14 @@
 
         function fetchFrame(index) {
             g_frameBuffer.set_next(index);
-            if (!g_frameBuffer.has_next()) {
+            if (!g_frameBuffer.has_next($('#plane_select').val())) {
                 $.ajax({
                     url: '{{ url_for('.getFrames', _external=True) }}',
                     type: 'POST',
                     cache: false,
                     data: {
                         frames: [index],
-                        planes: [0],
+                        planes: [$('#plane_select').val()],
                         path: g_filePath,
                         normingVal: g_normingVal,
                         channel: g_sequenceInfo.channel,
@@ -1092,16 +1155,22 @@
                     $('#indicator').fadeOut(1000);
 
                     g_frameBuffer.addFrames(response);
+                    g_frameBuffer.set_next(index);
                     playFramesFromQueue(true);
+                    $('.stepButton').removeClass('selected');
                });
            } else {
                 playFramesFromQueue(true);
+                $('.stepButton').removeClass('selected');
            }
         }
 
         function clearRois() {
             roiContext.rois = {};
-            drawShapes(roiContext);
+            $('#roi_mode_button').removeClass('selected');
+            $('#roi_mode_button').addClass('hidden');
+            roiContext.clear(roiContext.COLOR_BUFFER_BIT | roiContext.DEPTH_BUFFER_BIT) ;
+            roiContext.render = function() {}
         }
 
         $('#clear_rois_button').click(function() {
@@ -1109,29 +1178,22 @@
         });
 
         $('#roi_slider').on('input',function() {
-            drawShapes(roiContext);
+            roiContext.render();
         })
-
-
-        function showPlane(plane) {
-            var thisFrame = g_frameBuffer.popFrame(g_frameBuffer.current,plane);
-            xProjection.texture.image.src = ''+thisFrame.x;
-            yProjection.texture.image.src = ''+thisFrame.y;
-            zProjection.texture.image.src = ''+thisFrame.z;
-        }
 
 
         $('#volume_button').click(function() {
             if($('#volume_button').hasClass('selected')) {
                 $('#volume_button').removeClass('selected');
-                showPlane(0);
+                g_frameViewer.setCurrentPlane(1);
                 return;
             }
             
             if (g_frameBuffer.hasVolume()) {
                 $('#volume_button').addClass('selected');
-                g_plane = 1;
-                showPlane(1);
+                if (g_frameViewer.getCurrentPlane() == 0) {
+                    g_frameViewer.setCurrentPlane(1);
+                }
                 return;
             }
 
@@ -1175,6 +1237,52 @@
         $('#goto_frame_button').click(function() {
             fetchFrame($('#goto_frame_input').val()-1)
             $('#goto_box').addClass('hidden');
+        });
+
+        $('#scroll_out_button').click(function() {
+            var e = jQuery.Event( "DOMMouseScroll",{originalEvent:{wheelDelta: -1}} );
+            $('#roi_canvas').trigger(e);
+        });
+
+        $('#scroll_in_button').click(function() {
+            var e = jQuery.Event( "DOMMouseScroll",{originalEvent:{wheelDelta: 1}} );
+            $('#roi_canvas').trigger(e);
+        });
+
+        $('#plane_select').change(function() {
+            fetchFrame(g_frameViewer.current);
+        });
+
+        $('#roi_mode_button').click(function() {
+            if ($(this).hasClass('selected')) {
+                $(this).removeClass('selected');
+            } else {
+                $(this).addClass('selected');
+            }
+        });
+
+        $(document).keypress(function(e) {
+            if ($('#roi_mode_button').hasClass('selected')) {
+                var rois = Object.keys(roiContext.rois);
+                var currentIndex = Math.max(0,rois.indexOf(roiContext.current));
+                if ([37,38].indexOf(e.keyCode) != -1) {
+                    setRoiMask(rois[Math.max(0,currentIndex-1)]);
+                } else if ([39,40].indexOf(e.keyCode) != -1) {
+                    setRoiMask(rois[Math.min(rois.length-1,currentIndex+1)]);
+                }
+                return;
+            }
+
+            if ((e.keyCode == 38)) {
+                g_frameViewer.setCurrentPlane(g_frameViewer.getCurrentPlane()-1);
+            } else if(e.keyCode == 40) {
+                g_frameViewer.setCurrentPlane(g_frameViewer.getCurrentPlane()+1);
+            } else if (e.keyCode == 37) {
+                $('#single_reverse_button').trigger('click');
+            } else if (e.keyCode == 39) {
+                $('#single_step_button').trigger('click');
+            }
+
         });
 
     </script>
