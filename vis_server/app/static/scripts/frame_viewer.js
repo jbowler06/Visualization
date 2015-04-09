@@ -2,10 +2,12 @@ function FrameViewer() {
     this.playing = false;
     this.frameDelay = 166.66;
     this.dragScale = 400;
+    this.current = 0;
 
     this.zoomLevel = -3.5;
     this.mainProjectionHeight = 2;
     this.mainProjectionWidth = 2;
+    this.planeSelect = $('#plane_select');
 
     this.offset = { x:0, y:0 };
 
@@ -15,6 +17,16 @@ function FrameViewer() {
 
     this.isPlaying = function() {
         return this.playing;
+    }
+
+    this.getCurrentPlane = function() {
+        return parseInt(this.planeSelect.val());
+    };
+
+    this.setCurrentPlane = function(plane) {
+        this.planeSelect.val(
+                Math.min(Math.max(0,plane),this.planeSelect.attr('max')));
+        this.planeSelect.trigger('change');
     }
 
     this.setPlaying = function(state) {
@@ -36,23 +48,22 @@ function FrameViewer() {
         gl_canvas.bind('DOMMouseScroll mousewheel', function(event) {
             if (event.originalEvent.wheelDelta > 0 || event.originalEvent.detail < 0) {
                 if ($('#volume_button').hasClass('selected')) {
-                    g_plane = Math.min(g_sequenceInfo.planes.length-1,g_plane+1);
-                    showPlane(g_plane);
+                    thisViewer.setCurrentPlane(thisViewer.getCurrentPlane()+1);
                 } else {
                     thisViewer.zoomLevel = Math.min(thisViewer.zoomLevel+0.1,-0.1);
                 }
             } else {
                 if ($('#volume_button').hasClass('selected')) {
-                    g_plane = Math.max(1,g_plane-1);
-                    showPlane(g_plane);
+                    $('#plane_select').val();
+                    thisViewer.setCurrentPlane(Math.max(1,thisViewer.getCurrentPlane()-1));
                 } else {
                     thisViewer.zoomLevel -= 0.1;
                 }
             }
             if (!play) {
-                drawScene(frameContext);
+                frameContext.render();
             }
-            drawShapes(roiContext)
+            roiContext.render();
         });
 
         gl_canvas.bind('mousedown',function(){
@@ -72,9 +83,9 @@ function FrameViewer() {
                 thisViewer.offset.y -= dy/dragScale;
 
                 if (!play) {
-                    drawScene(frameContext);
+                    frameContext.render();
                 }
-                drawShapes(roiContext);
+                roiContext.render();
             }
             mouseState.lastMouseX = event.clientX;
             mouseState.lastMouseY = event.clientY;

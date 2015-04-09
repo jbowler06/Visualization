@@ -7,9 +7,10 @@ function FrameBuffer(sequenceId,maxLength) {
     this.requested = []
     this.currentKey = -1
     this.maxSortedIndex = -1
-    this.full = false
-    this.sequenceId = sequenceId
-    this.incommingBuffer = []
+    this.full = false;
+    this.sequenceId = sequenceId;
+    this.incommingBuffer = [];
+    this.planes = [0];
 
     this.length = function() { 
         return Object.keys(this.buffer).length 
@@ -26,17 +27,20 @@ function FrameBuffer(sequenceId,maxLength) {
         this.frameDelta = aFrameDelta
     }
 
+    this.set_planes = function(planeList) {
+        this.planes = planeList;
+    }
+
     this.hasVolume = function() {
         var index = this.current;
         if (typeof this.buffer[index] !== "undefined") {
-            return this.buffer[index].length > 1;
+            return Object.keys(this.buffer[index]).length-1 == Object.keys(this.planes).length;
         }
 
         return false;
     }
 
-    this.has_next = function() {
-        var plane = 0;
+    this.has_next = function(plane) {
         var next_idx = this.current + this.frameDelta;
         if (typeof this.buffer[next_idx] !== "undefined") {
             if (typeof this.buffer[next_idx][plane] !== "undefined") {
@@ -51,6 +55,7 @@ function FrameBuffer(sequenceId,maxLength) {
         return this.current + this.frameDelta
     }
 
+    /*
     this.sortKeys = function(a,b,current,delta) {
         var a_comp = (a-current)%delta
         var b_comp = (b-current)%delta
@@ -62,7 +67,7 @@ function FrameBuffer(sequenceId,maxLength) {
         } else {
             return (a-b)*Math.abs(delta)
         }
-    }
+    }*/
     
     
     this.isFull = function() {
@@ -84,32 +89,40 @@ function FrameBuffer(sequenceId,maxLength) {
         return true
     }
 
-    this.sortKeys = function() {
-        var current = this.current
-        var delta = this.frameDelta
+    this.sortKeys = function(plane) {
+        var current = this.current;
+        var delta = this.frameDelta;
+        var buffer = this.buffer;
+        
+        if (typeof plane === 'undefined') {
+            plane = 0;
+        }
 
-        this.keys = Object.keys(this.buffer)
+        this.keys = Object.keys(buffer)
         this.keys.sort(function(a,b) {
-            var a_comp = (a-current)%delta
-            var b_comp = (b-current)%delta
+            var a_comp = (a-current)%delta * (typeof buffer[""+a][plane] !== "undefined");
+            var b_comp = (b-current)%delta * (typeof buffer[""+b][plane] !== "undefined");
 
             if (!a_comp && b_comp){
-                return -1
+                return -1;
             } else if (a_comp && !b_comp){
-                return 1
+                return 1;
             } else {
-                return (a-b)*delta
+                return (a-b)*delta;
             }
         })
 
         this.maxSortedIndex = this.keys.find(function(element,index,array) {
             if (index == 0) {
-                return array.length == 1   
+                return array.length == 1;
             } if (index == array.length-1) {
-                return true
+                return true;
             }
-            return ((array[index+1]-element != delta) && (element > current))
-        })
+
+            return (((typeof buffer[array[index+1]][plane] === "undefined") || 
+                            (array[index+1]-element != delta)) && (element > current));
+
+        });
 
         return this.keys
     }
@@ -119,7 +132,7 @@ function FrameBuffer(sequenceId,maxLength) {
         this.requested.splice(this.requested.indexOf(index),1)
         this.buffer[parseInt(index)][0] = frame
         
-        var keys = this.sortKeys()
+        var keys = this.sortKeys(g_frameViewer.getCurrentPlane());
         var currentKey = keys.indexOf(""+this.current)
 
         var len = this.length()
@@ -152,8 +165,8 @@ function FrameBuffer(sequenceId,maxLength) {
             }
         }
 
-        var keys = this.sortKeys()
-        var currentKey = keys.indexOf(""+this.current)
+        var keys = this.sortKeys(g_frameViewer.getCurrentPlane())
+        var currentKey = keys.indexOf(""+this.current);
 
         var len = this.length()
         while (len > this.maxLength) {
@@ -172,7 +185,7 @@ function FrameBuffer(sequenceId,maxLength) {
 
 
     this.popFrame = function(index,plane) {
-        if (!this.buffer[index][0]) {
+        if (!this.buffer[index]) {
             alert('requested to play frame doesn\'t exist');
             return false;
         }
@@ -183,7 +196,7 @@ function FrameBuffer(sequenceId,maxLength) {
         return this.buffer[index][plane];
     }
 
-    this.next_request = function(numFrames) {
+    this.next_request = function(numFrames, plane) {
         var requestQueue = []
         var frame = this.current+this.frameDelta
         var keys = Object.keys(this.buffer)
@@ -192,7 +205,7 @@ function FrameBuffer(sequenceId,maxLength) {
             if (frame < -1) {
                 break;
             }
-            if ((!this.buffer[frame]) && (this.requested.indexOf(frame) == -1)) {
+            if (((!this.buffer[frame])||(!this.buffer[frame][plane])) && (this.requested.indexOf(frame) == -1)) {
                 requestQueue.push(frame);
                 this.requested.push(frame);
             }

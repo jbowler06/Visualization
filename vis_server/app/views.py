@@ -15,6 +15,9 @@ import base64
 import urllib
 import matplotlib
 import matplotlib.cm
+import re
+import time
+import numpy.ma as ma
 
 from flask import render_template
 from flask import request
@@ -84,7 +87,7 @@ def getInfo():
     }
 
     for channel in norm_factors.keys():
-        json[channel] = int(np.nanmean(norm_factors[channel]))
+        json[channel] = max(1,int(np.nanmean(norm_factors[channel])))
 
     return jsonify(**json)
 
@@ -113,6 +116,12 @@ def getLabels():
         return ''
 
     labels = dataset.ROIs.keys()
+
+    labels.extend(
+        map(os.path.basename,glob.glob(os.path.join(ds_path,'ica*.npz'))))
+    labels.extend(
+        map(os.path.basename,glob.glob(os.path.join(ds_path,'opca*.npz'))))
+
     return render_template('select_list.html',options=labels)
 
 
@@ -129,6 +138,131 @@ def convertToBin(arr):
     imageString = "data:image/png;base64,"+base64.b64encode(strBuffer.read())
 
     return (imageString, min_val)
+
+
+def convertToB64Jpeg(arr, quality=100):
+    img = Image.fromarray(arr,'L')
+    img_io = StringIO.StringIO()
+    img.save(img_io, 'jpeg', quality=quality)
+    img_io.seek(0)
+
+    return 'data:image/jpeg;base64,'+base64.b64encode(img_io.read())
+
+def convertToColorB64Jpeg(arr, quality=100):
+    img = Image.fromarray(arr,'RGB')
+    img.save('/home/jack/tmp/'+str(time.time())+'.png')
+    img_io = StringIO.StringIO()
+    img.save(img_io, 'jpeg', quality=quality)
+    img_io.seek(0)
+
+    return 'data:image/jpeg;base64,'+base64.b64encode(img_io.read())
+
+
+@app.route('/getComponenets', methods=['GET','POST'])
+def getComponents():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')   
+    quality = 100
+    
+    if re.match('^ica',label) is not None:
+        components = np.load(os.path.join(ds_path,label))['st_components']
+    else:
+        components = np.load(os.path.join(ds_path,label))['oPCs']
+
+    projectedRois = {}
+    for i in xrange(components.shape[3]):
+        vol = components[:,:,:,i]
+        cutoff = np.percentile(vol[np.where(np.isfinite(vol))],25)
+        vol -= cutoff
+        cutoff = np.percentile(vol[np.where(np.isfinite(vol))],99)
+        vol = vol*255/cutoff
+        vol = np.clip(vol, 0, 255)
+        
+        zsurf = np.nanmean(vol,axis=0)
+        ysurf = np.nanmean(vol,axis=1)
+        xsurf = np.nanmean(vol,axis=2).T
+
+        label = 'component_' + str(i)
+            
+        projectedRois[label] = {
+                'z':convertToB64Jpeg(zsurf.astype('uint8'),quality=quality),
+                'y':convertToB64Jpeg(ysurf.astype('uint8'),quality=quality),
+                'x':convertToB64Jpeg(xsurf.astype('uint8'),quality=quality)
+            }
+
+    return jsonify(**projectedRois)
+
+
+@app.route('/getRoiMasks', methods=['GET','POST'])
+def getRoiMasks():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')   
+    overlay = True
+    quality = 100
+    
+    dataset = ImagingDataset.load(ds_path)
+    rois = dataset.ROIs[label]
+    projectedRois = {}
+    
+    if overlay == True:
+        vol = np.zeros(list(dataset.frame_shape[:3])+[3])
+        cmap = matplotlib.cm.jet
+        norm = matplotlib.colors.Normalize(vmin=0, vmax=len(rois))
+        m = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+
+        for index,roi in enumerate(rois):
+            color = np.array(m.to_rgba(index))[:-1]
+            color /= np.sum(color)
+            roiVol = np.array([plane.todense().astype(float) for plane in roi.mask])
+            mask2 = ma.masked_where(np.logical_and(np.sum(vol,axis=-1) > 0,roiVol>0),roiVol).mask
+            mask1 = ma.masked_where(np.logical_and(np.logical_not(mask2),roiVol>0),roiVol).mask
+
+            if np.any(mask1):
+                vol[mask1] = color
+
+            if np.any(mask2):
+                vol[mask2] = vol[mask2]/2+color/2
+
+        cutoff = np.percentile(vol[np.where(np.isfinite(vol))],25)
+        vol -= cutoff
+        cutoff = np.percentile(vol[np.where(np.isfinite(vol))],99)
+        vol = vol*255/cutoff
+        vol = np.clip(vol, 0, 255)
+        
+        zsurf = np.nanmean(vol,axis=0)
+        ysurf = np.nanmean(vol,axis=1)
+        xsurf = np.swapaxes(np.nanmean(vol,axis=2),0,1)
+            
+        projectedRois['rois'] = {
+                'z':convertToColorB64Jpeg(zsurf.astype('uint8'),quality=quality),
+                'y':convertToColorB64Jpeg(ysurf.astype('uint8'),quality=quality),
+                'x':convertToColorB64Jpeg(xsurf.astype('uint8'),quality=quality)
+            }
+        return jsonify(**projectedRois)
+    
+    for i,roi in enumerate(rois):
+        mask = roi.mask
+        vol = np.array([plane.todense().astype(float) for plane in mask])
+        cutoff = np.percentile(vol[np.where(np.isfinite(vol))],25)
+        vol -= cutoff
+        cutoff = np.percentile(vol[np.where(np.isfinite(vol))],99)
+        vol = vol*255/cutoff
+        vol = np.clip(vol, 0, 255)
+        
+        zsurf = np.nanmean(vol,axis=0)
+        ysurf = np.nanmean(vol,axis=1)
+        xsurf = np.nanmean(vol,axis=2).T
+
+        if roi.label is None:
+            roi.label = 'roi_' + str(i)
+            
+        projectedRois[roi.label] = {
+                'z':convertToB64Jpeg(zsurf.astype('uint8'),quality=quality),
+                'y':convertToB64Jpeg(ysurf.astype('uint8'),quality=quality),
+                'x':convertToB64Jpeg(xsurf.astype('uint8'),quality=quality)
+            }
+
+    return jsonify(**projectedRois)
 
 
 @app.route('/getRois', methods=['GET','POST'])
@@ -164,6 +298,7 @@ def getFrames():
     sequenceId = request.form.get('sequenceId')
     channel = request.form.get('channel')
     planes = request.form.getlist('planes[]',type=int)
+
     if planes is None:
         planes = [0]
 
@@ -219,35 +354,23 @@ def getFrames():
                 zsurf = np.nanmean(vol,axis=0)
             else:
                 zsurf = vol[plane-1,:,:]
-            img = Image.fromarray(zsurf.astype('uint8'),'L')
-            img_io_z = StringIO.StringIO()
-            img.save(img_io_z, 'jpeg', quality=quality)
-            img_io_z.seek(0)
 
             if plane == 0:
                 ysurf = np.nanmean(vol,axis=1)
             else:
                 ysurf = np.zeros((vol.shape[0],vol.shape[2]))
                 ysurf[plane-1,:]=np.nanmean(zsurf,axis=0)
-            img = Image.fromarray(ysurf.astype('uint8'),'L')
-            img_io_y = StringIO.StringIO()
-            img.save(img_io_y, 'jpeg', quality=quality)
-            img_io_y.seek(0)
 
             if plane == 0:
                 xsurf = np.nanmean(vol,axis=2).T
             else:
                 xsurf = np.zeros((vol.shape[1],vol.shape[0]))
                 xsurf[:,plane-1]=np.nanmean(zsurf,axis=1).T
-            img = Image.fromarray(xsurf.astype('uint8'),'L')
-            img_io_x = StringIO.StringIO()
-            img.save(img_io_x, 'jpeg', quality=quality)
-            img_io_x.seek(0)
             
             frames['frame_'+str(frame_number)][plane] = {
-                'z':base64.b64encode(img_io_z.read()),
-                'y':base64.b64encode(img_io_y.read()),
-                'x':base64.b64encode(img_io_x.read())
+                'z':convertToB64Jpeg(zsurf.astype('uint8'),quality=quality),
+                'y':convertToB64Jpeg(ysurf.astype('uint8'),quality=quality),
+                'x':convertToB64Jpeg(xsurf.astype('uint8'),quality=quality)
             }
 
     return jsonify(end=end,sequenceId=sequenceId,**frames)
