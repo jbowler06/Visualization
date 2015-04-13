@@ -4,6 +4,7 @@ function roi(label,color) {
     this.points = [];
     this.pointsGl = [];
     this.glBuffer = roiContext.createBuffer();
+    this.mask = {};
 
     this.widthScale = g_frameViewer.mainProjectionWidth/g_sequenceInfo.width;
     this.widthConst = g_frameViewer.mainProjectionWidth/2;
@@ -11,6 +12,7 @@ function roi(label,color) {
     this.heightScale = g_frameViewer.mainProjectionHeight/g_sequenceInfo.height;
     this.heightConst = g_frameViewer.mainProjectionHeight-g_frameViewer.mainProjectionHeight/2;
     this.setPoints = function(roiPoints) {
+        this.type = 'polygons';
         this.points = roiPoints
         for (var i=0; i < roiPoints.length; i++) {
             if (i%2 == 0) {
@@ -26,6 +28,12 @@ function roi(label,color) {
         this.glBuffer.itemSize = 3;
         this.glBuffer.numItems = this.pointsGl.length/3;
     }
+
+    this.setMask = function (projections) {
+        this.type = 'mask'
+        this.mask = projections
+    }
+
 
     /*
     this.setPointsBin = function(roiInfo) {
