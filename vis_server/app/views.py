@@ -37,34 +37,68 @@ import struct
 
 import random
 
-def getSequence(directory):
-    if (os.path.splitext(directory)[-1] == '.sima'):
-        ds = ImagingDataset.load(directory)
-        seq = ds.__iter__().next()
-    else:
-        seq = Sequence.create('HDF5',directory,'tzyxc')
-    return seq
-
-
+"""
 def convertList16(arr):
     conv = lambda x: [int('0'+hex(int(x+0.5))[2:][:-2],16),int(hex(int(x+0.5))[2:][-2:],16)]
     return list(it.chain(*map(conv,arr)))
+"""
+
+def convertToBin(arr):
+    min_val = np.min(arr)
+    arr+=min_val
+    dat = arr.reshape((1,arr.shape[0]))
+
+    img = Image.fromarray(dat.astype('uint8'),'L')
+    strBuffer = StringIO.StringIO()
+    img.save(strBuffer, 'png')
+    strBuffer.seek(0)
+
+    imageString = "data:image/png;base64,"+base64.b64encode(strBuffer.read())
+
+    return (imageString, min_val)
+
+
+def convertToB64Jpeg(arr, quality=100):
+    img = Image.fromarray(arr,'L')
+    img_io = StringIO.StringIO()
+    img.save(img_io, 'jpeg', quality=quality)
+    img_io.seek(0)
+
+    return 'data:image/jpeg;base64,'+base64.b64encode(img_io.read())
+
+
+def convertToColorB64Jpeg(arr, quality=100):
+    img = Image.fromarray(arr,'RGB')
+    img.save('/home/jack/tmp/'+str(time.time())+'.png')
+    img_io = StringIO.StringIO()
+    img.save(img_io, 'jpeg', quality=quality)
+    img_io.seek(0)
+
+    return 'data:image/jpeg;base64,'+base64.b64encode(img_io.read())
 
 
 @app.route('/')
 @app.route('/index')
 def index():
     return render_template('index.html')
+    #return render_template('webgl_lesson1.html')
 
 @app.route('/getInfo', methods=['GET','POST'])
 def getInfo():
     ds_path = request.form.get('path')
 
     if (os.path.splitext(ds_path)[-1] == '.sima'):
-        ds = ImagingDataset.load(ds_path)
+        try:
+            ds = ImagingDataset.load(ds_path)
+        except IOError:
+            return jsonify(error='dataset not found')
+
         seq = ds.__iter__().next()
     else:
-        seq = Sequence.create('HDF5',ds_path,'tzyxc')
+        try:
+            seq = Sequence.create('HDF5',ds_path,'tzyxc')
+        except IOError:
+            return jsonify(error='dataset not found')
 
     length = len(seq)
     norm_factors = {}
@@ -91,15 +125,22 @@ def getInfo():
 
     return jsonify(**json)
 
+
 @app.route('/getChannels/<directory>')
 def getChannels(directory):
     ds_path = directory.replace(':!','/')
 
     if (os.path.splitext(ds_path)[-1] == '.sima'):
-        ds = ImagingDataset.load(ds_path)
+        try:
+            ds = ImagingDataset.load(ds_path)
+        except IOError:
+            return ''
         channels = ds.channel_names
     else:
-        seq = Sequence.create('HDF5',ds_path,'tzyxc')
+        try:
+            seq = Sequence.create('HDF5',ds_path,'tzyxc')
+        except IOError:
+            return ''
         channels = ['channel_' + str(idx) for idx in range(seq.shape[4])]
 
     if (len(channels) > 1):
@@ -123,39 +164,6 @@ def getLabels():
         map(os.path.basename,glob.glob(os.path.join(ds_path,'opca*.npz'))))
 
     return render_template('select_list.html',options=labels)
-
-
-def convertToBin(arr):
-    min_val = np.min(arr)
-    arr+=min_val
-    dat = arr.reshape((1,arr.shape[0]))
-
-    img = Image.fromarray(dat.astype('uint8'),'L')
-    strBuffer = StringIO.StringIO()
-    img.save(strBuffer, 'png')
-    strBuffer.seek(0)
-
-    imageString = "data:image/png;base64,"+base64.b64encode(strBuffer.read())
-
-    return (imageString, min_val)
-
-
-def convertToB64Jpeg(arr, quality=100):
-    img = Image.fromarray(arr,'L')
-    img_io = StringIO.StringIO()
-    img.save(img_io, 'jpeg', quality=quality)
-    img_io.seek(0)
-
-    return 'data:image/jpeg;base64,'+base64.b64encode(img_io.read())
-
-def convertToColorB64Jpeg(arr, quality=100):
-    img = Image.fromarray(arr,'RGB')
-    img.save('/home/jack/tmp/'+str(time.time())+'.png')
-    img_io = StringIO.StringIO()
-    img.save(img_io, 'jpeg', quality=quality)
-    img_io.seek(0)
-
-    return 'data:image/jpeg;base64,'+base64.b64encode(img_io.read())
 
 
 @app.route('/getComponenets', methods=['GET','POST'])
@@ -197,23 +205,29 @@ def getComponents():
 def getRoiMasks():
     ds_path = request.form.get('path')
     label = request.form.get('label')   
+    index = request.form.get('index',type=int)
     overlay = True
     quality = 100
-    
+
     dataset = ImagingDataset.load(ds_path)
     rois = dataset.ROIs[label]
+    num_rois = len(rois)
+    if index is not None:
+        indicies = [index]
+    else:
+        indicies = range(num_rois)
     projectedRois = {}
     
     if overlay == True:
         vol = np.zeros(list(dataset.frame_shape[:3])+[3])
         cmap = matplotlib.cm.jet
-        norm = matplotlib.colors.Normalize(vmin=0, vmax=len(rois))
+        norm = matplotlib.colors.Normalize(vmin=0, vmax=num_rois)
         m = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
 
-        for index,roi in enumerate(rois):
+        for index in indicies:
             color = np.array(m.to_rgba(index))[:-1]
             color /= np.sum(color)
-            roiVol = np.array([plane.todense().astype(float) for plane in roi.mask])
+            roiVol = np.array([plane.todense().astype(float) for plane in rois[index].mask])
             mask2 = ma.masked_where(np.logical_and(np.sum(vol,axis=-1) > 0,roiVol>0),roiVol).mask
             mask1 = ma.masked_where(np.logical_and(np.logical_not(mask2),roiVol>0),roiVol).mask
 
@@ -238,7 +252,7 @@ def getRoiMasks():
                 'y':convertToColorB64Jpeg(ysurf.astype('uint8'),quality=quality),
                 'x':convertToColorB64Jpeg(xsurf.astype('uint8'),quality=quality)
             }
-        return jsonify(**projectedRois)
+        return jsonify(num_rois=num_rois,**projectedRois)
     
     for i,roi in enumerate(rois):
         mask = roi.mask
@@ -273,21 +287,22 @@ def getRois():
     dataset = ImagingDataset.load(ds_path)
     convertedRois = {}
     rois = dataset.ROIs[label]
-    for roi in rois:
-        poly = roi.polygons[0]
-        coords = []
-        
-        for x,y in zip(*poly.exterior.coords.xy):
-            coords += [int(x),int(y)]
-
-        #stringBuffer,min_val = convertToBin(np.array(convertList16(coords)))
-        #convertedRois[roi.label] = {'points': stringBuffer,
-        #                            'min_val': min_val,
-        #                            'length': len(coords)*2}
-        convertedRois[roi.label] = coords
+    
+    for i,roi in enumerate(rois):
+        if roi.label is None:
+            roi.label = i
+        convertedRois[roi.label] = {}
+        for poly in roi.polygons:
+            coords = np.array(poly.exterior.coords)
+            plane = int(coords[0,-1])
+            #coords = list(coords[:,:2].ravel())
+            coords = coords[:,:2].tolist()
+            try:
+               convertedRois[roi.label][plane].append(coords)
+            except KeyError:
+                convertedRois[roi.label][plane] = [coords]
 
     return jsonify(**convertedRois)
-
 
 
 @app.route('/getFrames', methods=['GET','POST'])
@@ -383,6 +398,7 @@ def getFolders(directory):
         glob.glob(os.path.join(directory,'*')) if os.path.isdir(fname) or os.path.splitext(fname)[-1] =='.h5']
     subfolders = ['']+sorted(subfolders)
     return render_template('select_list.html',options=subfolders) 
+
 
 @app.route('/saveImage', methods=['GET','POST'])
 def saveImage():

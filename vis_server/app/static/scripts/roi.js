@@ -1,9 +1,6 @@
 function roi(label,color) {
     this.label = label;
     this.color = color;
-    this.points = [];
-    this.pointsGl = [];
-    this.glBuffer = roiContext.createBuffer();
     this.mask = {};
 
     this.widthScale = g_frameViewer.mainProjectionWidth/g_sequenceInfo.width;
@@ -11,22 +8,66 @@ function roi(label,color) {
 
     this.heightScale = g_frameViewer.mainProjectionHeight/g_sequenceInfo.height;
     this.heightConst = g_frameViewer.mainProjectionHeight-g_frameViewer.mainProjectionHeight/2;
+    
+    this.segments = []
+
     this.setPoints = function(roiPoints) {
         this.type = 'polygons';
-        this.points = roiPoints
-        for (var i=0; i < roiPoints.length; i++) {
-            if (i%2 == 0) {
-                this.pointsGl.push(roiPoints[i]*this.widthScale-this.widthConst)
-            } else {
-                this.pointsGl.push(
-                    g_frameViewer.mainProjectionHeight*(1/2-roiPoints[i]/g_sequenceInfo.height));
-                this.pointsGl.push(0.0);
+        for (var plane in roiPoints) {
+            this.segments[parseInt(plane)] = [];
+            for (var seg in roiPoints[plane]) {
+                var segment = {}
+                segment.polyBuffer = roiContext.createBuffer();
+                segment.polyBuffer.points = [];
+                
+                var ec = earcut([roiPoints[plane][seg]],true);
+                var tris = ec.vertices;
+                for (var i=0; i < tris.length; i++) {
+                    if (i%2 == 0) {
+                        segment.polyBuffer.points.push(tris[i]*this.widthScale-this.widthConst)
+                    } else {
+                        segment.polyBuffer.points.push(
+                            g_frameViewer.mainProjectionHeight*(1/2-tris[i]/g_sequenceInfo.height));
+                        segment.polyBuffer.points.push(0);
+                    }
+                }
+
+                segment.boundaryBuffer = roiContext.createBuffer();
+                segment.boundaryBuffer.points = [];
+                for (var i=0; i < roiPoints[plane][seg].length; i++) {
+                    segment.boundaryBuffer.points.push(roiPoints[plane][seg][i][0]*this.widthScale-this.widthConst)
+                    segment.boundaryBuffer.points.push(
+                        g_frameViewer.mainProjectionHeight*(1/2-roiPoints[plane][seg][i][1]/g_sequenceInfo.height));
+                    segment.boundaryBuffer.points.push(0);
+                }
+
+                roiContext.bindBuffer(roiContext.ARRAY_BUFFER, segment.boundaryBuffer);
+                roiContext.bufferData(roiContext.ARRAY_BUFFER, new Float32Array(segment.boundaryBuffer.points), roiContext.STATIC_DRAW);
+                segment.boundaryBuffer.itemSize = 3;
+                segment.boundaryBuffer.numItems = segment.boundaryBuffer.points.length/3;
+
+                roiContext.bindBuffer(roiContext.ARRAY_BUFFER, segment.polyBuffer);
+                roiContext.bufferData(roiContext.ARRAY_BUFFER, new Float32Array(segment.polyBuffer.points), roiContext.STATIC_DRAW);
+                segment.polyBuffer.itemSize = 3;
+                segment.polyBuffer.numItems = segment.polyBuffer.points.length/3;
+
+                segment.indicesBuffer = roiContext.createBuffer();
+                roiContext.bindBuffer(roiContext.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
+                roiContext.bufferData(roiContext.ELEMENT_ARRAY_BUFFER, new Uint16Array(ec.indices), roiContext.STATIC_DRAW);
+                segment.indicesBuffer.itemSize = 1;
+                segment.indicesBuffer.numItems = ec.indices.length;
+
+                this.segments[parseInt(plane)].push(segment);
             }
         }
-        roiContext.bindBuffer(roiContext.ARRAY_BUFFER, this.glBuffer);
-        roiContext.bufferData(roiContext.ARRAY_BUFFER, new Float32Array(this.pointsGl), roiContext.STATIC_DRAW);
-        this.glBuffer.itemSize = 3;
-        this.glBuffer.numItems = this.pointsGl.length/3;
+    }
+
+    this.getSegments = function(plane) {
+        if (typeof this.segments[plane] == 'undefined') {
+            return [];
+        }
+
+        return this.segments[plane]
     }
 
     this.setMask = function (projections) {

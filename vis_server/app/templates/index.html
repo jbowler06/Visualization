@@ -1,218 +1,48 @@
 <html>
 
 <head>
-    <style media="screen" type="text/css">
-        body {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            background-color: #000;
-            color: #F00;
-        }
-        .canvasContainer {
-            margin: auto auto;
-            display: block;
-            position: relative;
-            width: 800px;
-        }
-        .webGlCanvas {
-            position: absolute;
-            left: 0px;
-            top: 0px;
-        }
-        #gl_canvas {
-           /* border: thin solid #0F0;*/
-        }
-        #roi_canvas {
-           /* border: thin solid #F00;*/
-        }   
-        .floatLeft {
-            float: Left;
-        }
-        .floatRight {
-            float: Right;
-        }
-        .warningBox {
-            text-align:center;
-            color: #0F0;
-            padding: 15px;
-            width: 100px;
-            height: 50px;
-            margin-top: 20px;
-        }
-        .warningBox span {
-            text-height: 20px;
-        }
-        .largeLabel {
-            text-align:center;
-            color: #0F0;
-            padding: 15px;
-            width: 100px;
-            height: 50px;
-            margin-top: 20px;
-        }
-        .largeLabel span {
-            text-height:20px;
-            font-size: 40px;
-        }
-        .smallLabel {
-            margin: -20px 0px 20px 20px;
-        }
-        .smallLabel span {
-            text-height:10px;
-            font-size: 18px;
-            color: #0F0;
-        }
-        .button {
-            text-align:center;
-            color: #0F0;
-            padding: 15px;
-            width: 100px;
-            height: 20px;
-            border: thin solid #0F0;
-
-            -webkit-user-select: none; /* Chrome/Safari */        
-            -moz-user-select: none; /* Firefox */
-            -ms-user-select: none; /* IE10+ */
-        }
-        .button span {
-            text-height:20px;
-        }
-        .button:hover, #frame_number_span:hover {
-            background-color: #555;
-            cursor: pointer;
-        }
-        .button.selected {
-            background-color: #555;
-        }
-        .button.smallButton {
-            width: 20px;
-            padding: 4px;
-        }
-        .button.halfButton {
-            width: 35px;
-        }
-        .slim {
-            height: 20px !important;
-            padding: 2px !important;
-            width: 61px !important;
-        }
-        .slim span {
-            height 5px; !important
-        }
-        .indicator {
-            height: 20px;
-            width: 20px;
-            background-color: #007500;
-            border-radius: 50%;
-            display: none;
-        }
-        .controls {
-            display: block;
-            position: absolute;
-        }
-        .loadBox {
-            position: absolute;
-            display: block;
-            z-index: 100;
-            background-color: #000;
-            color: #0F0;
-            width: 450px;
-            border: thin solid #0F0;
-            padding: 10px 40px;
-        }
-        .frame_slider {
-            margin: 0px;
-        }
-        .hidden {
-            display: None;
-        }
-        .loadBox p {
-            margin: 5px;
-            padding: 0px;
-            float: left;
-            width:100%
-        }
-        .loadBox input {
-            line-height:2;
-            width: 300px;
-        }
-        .loadBox select{
-            line-height:2;
-            min-width: 300px;
-            margin: 5px 0px;
-        }
-        .loadBox table {
-            color: #0F0;
-        }
-        .loadBox td {
-            padding: 5px 15px;
-        }
-        .loadBox table input {
-            width: 75px;
-        }
-        .loadBox table select {
-            min-width: 150px;
-        }
-        input.norming_value_input{
-            width: 75px;
-            line-height: 1;
-            margin-left: 10px;
-        }
-        .width100 {
-            width: 100%;
-        }
-        .height100 {
-            height: 100%;
-        }
-        #volume_button.loading {
-            color: #FFA500;
-        }
-        #volume_button.loaded {
-            background-color: #0F0;
-            color: #000;
-        }
-        #volume_button.loaded.selected {
-            color: #555;
-        }
-        #volume_button.loaded:hover {
-            color: #555;
-        }
-        #plane_select{
-            width:133px;
-        }
-    </style>
-
+    <link rel="stylesheet" type="text/css" 
+            href="{{ url_for('static', filename='css/index.css') }}">
     <title>my awesome website</title>
-
 </head>
 
 <body>
-    
     <div class="controls">
         <div class="button selected" id="load_button"><span>load</span></div>
         <div class="loadBox" id="load_box">
             <p>file selection:</p>
             <p style="width:auto;margin:0px 5px">
                 <input type="text" id="file_input" class="textInput floatLeft">
-                <div class="button smallButton floatLeft" id="file_get"><span>go</span></div>
-                <div class="button smallButton floatRight" id="file_cancel"><span>X</span></div>
+                <div class="button smallButton floatLeft" id="file_get">
+                    <span>go</span>
+                </div>
+                <div class="button smallButton floatRight" id="file_cancel">
+                    <span>X</span>
+                </div>
             </p>
             <div class="width100"></div>
             <p style="width:auto;margin:0px 5px">
                 <select id="file_select"></select>
-                <div class="button smallButton floatLeft" id="file_up_level"><span>..</span></div>
+                <div class="button smallButton floatLeft" id="file_up_level">
+                    <span>..</span>
+                </div>
             </p>
             <div>
-                <p><span class="floatLeft">normalizing constants:</span>
-                    <input type="text" class="norming_value_input floatLeft" id="ch1_norm_input">
-                    <input type="text" class="norming_value_input floatLeft hidden" id="ch2_norm_input">
+                <p><span class="floatLeft">Contrast Cutoff:</span>
+                    <input type="text" 
+                           class="norming_value_input floatLeft" 
+                           id="ch1_norm_input">
+                    <input type="text" 
+                           class="norming_value_input floatLeft hidden" 
+                           id="ch2_norm_input">
                 </p>
             </div>
             <p style="width:auto;margin:0px 5px">
                 <select class="floatLeft" id="channel_select"></select>
-                <div class="button smallButton floatLeft hidden" id="load_dataset_button"><span>ok</span></div>
+                <div class="button smallButton floatLeft hidden" 
+                     id="load_dataset_button">
+                    <span>ok</span>
+                </div>
             </p>
 
          </div>
@@ -222,24 +52,40 @@
                 <table class="floatLeft">
                     <tr>
                         <td>frame rate:</td>
-                        <td><input type="text" id="frame_rate_input" class="textInput floatLeft"></td>
+                        <td>
+                            <input type="text" 
+                                   id="frame_rate_input" 
+                                   class="textInput floatLeft">
+                        </td>
                         <td>Hz</td>
                     </tr>
                     <tr>
                         <td>packet size:</td>
-                        <td><input type="text" id="packet_size_input" class="textInput floatLeft"></td>
+                        <td>
+                            <input type="text" 
+                                   id="packet_size_input" 
+                                   class="textInput floatLeft">
+                        </td>
                         <td>frames</td>
                     </tr>
                     <tr>
                         <td>buffer size:</td>
-                        <td><input type="text" id="buffer_size_input" class="textInput floatLeft"></td>
+                        <td>
+                            <input type="text" 
+                                   id="buffer_size_input" 
+                                   class="textInput floatLeft">
+                        </td>
                         <td>frames</td>
                     </tr>
                 </table>
-                <div class="button smallButton floatRight" id="options_cancel"><span>ok</span></div>
+                <div class="button smallButton floatRight" id="options_cancel">
+                    <span>ok</span>
+                </div>
             </p>
         </div>
-        <div class="button" id="roi_button"><span>rois</span><br/><span><small>(2D only)</small></span></div>
+        <div class="button" id="roi_button">
+            <span>rois</span>
+        </div>
         <div class="loadBox hidden" id="roi_box">
             <p style="width:auto;margin:0px 5px">
                 <table class="floatLeft">
@@ -274,14 +120,20 @@
                     </tr>
                     <tr>
                         <td>
-                            <div class="button floatLeft" id="roi_load_button"><span>load</span></div>
+                            <div class="button floatLeft" id="roi_load_button">
+                                <span>load</span>
+                            </div>
                         </td>
                         <td>
-                            <div class="button floatLeft" id="clear_rois_button"><span>clear</span></div>
+                            <div class="button floatLeft" id="clear_rois_button">
+                                <span>clear</span>
+                            </div>
                         </td>
                     </tr>
                 </table>
-                <div class="button smallButton floatRight" id="roi_cancel"><span>X</span></div>
+                <div class="button smallButton floatRight" id="roi_cancel">
+                    <span>X</span>
+                </div>
             </p>
         </div>
         <div class="button" id="start_button"><span>start</span></div>
@@ -295,8 +147,12 @@
             <p>go to:</p>
             <p style="width:auto;margin:0px 5px">
                 <input type="text" id="goto_frame_input" class="textInput floatLeft">
-                <div class="button smallButton floatLeft" id="goto_frame_button"><span>go</span></div>
-                <div class="button smallButton floatRight" id="goto_cancel_button"><span>X</span></div>
+                <div class="button smallButton floatLeft" id="goto_frame_button">
+                    <span>go</span>
+                </div>
+                <div class="button smallButton floatRight" id="goto_cancel_button">
+                    <span>X</span>
+                </div>
             </p>
         </div>
         <div class="largeLabel" id="frame_number_label">
@@ -304,17 +160,34 @@
                 <span id="this_frame_label">0</span>/<span id="frame_num_label">0</span>
             </span>
         </div>
-        <div class="smallLabel" id="step_size_label"><span>step size: <span id="step_size_span">1</span></span></div>
+        <div class="smallLabel" id="step_size_label">
+            <span>step size: <span id="step_size_span">1</span></span>
+        </div>
        
-        <div><input type="range" name="frame_slider" id="frame_slider" min="0" max="100" value="0"></div>
+        <div>
+            <input type="range" name="frame_slider" id="frame_slider" 
+                    min="0" max="100" value="0">
+        </div>
         
         <div>
-            <div class="button halfButton floatLeft stepButton" id="single_reverse_button"><span>&#60;</span></div>
-            <div class="button halfButton floatLeft stepButton" id="single_step_button"><span>&#62;</span></div>
+            <div class="button halfButton floatLeft stepButton" 
+                 id="single_reverse_button">
+                <span>&#60;</span>
+            </div>
+            <div class="button halfButton floatLeft stepButton" 
+                 id="single_step_button">
+                <span>&#62;</span>
+            </div>
         </div>
         <div>
-            <div class="button halfButton floatLeft slim" id="reduce_step_button"><span>&#60;&#60;</span></div>
-            <div class="button halfButton floatLeft slim" id="increase_step_button"><span>&#62;&#62;</span></div>
+            <div class="button halfButton floatLeft slim" 
+                 id="reduce_step_button">
+                <span>&#60;&#60;</span>
+            </div>
+            <div class="button halfButton floatLeft slim" 
+                 id="increase_step_button">
+                <span>&#62;&#62;</span>
+            </div>
         </div>
         <div class="warningBox" id="buffering_warning"><span></span></div>
         <div> 
@@ -328,10 +201,18 @@
         <div class="canvasContainer">
             <canvas class="webGlCanvas" id="gl_canvas" width="800" height="700"></canvas>
             <canvas class="webGlCanvas" id="roi_canvas" width="800" height="700"></canvas>
-            <div class="button smallButton" id="volume_button" style="position:absolute; top:0px; right:0px;">V</div>
-            <div class="button smallButton" id="scroll_in_button" style="position:absolute; top:29px; right:0px;">&#43;</div>
-            <div class="button smallButton" id="scroll_out_button" style="position:absolute; top:58px; right:0px;">&#45;</div>
-            <div class="button smallButton hidden" id="roi_mode_button" style="position:absolute; margin-top:670px; right:0px;">R</div>
+            <div class="button smallButton" 
+                 id="volume_button" 
+                 style="position:absolute; top:0px; right:0px;">V</div>
+            <div class="button smallButton" 
+                 id="scroll_in_button" 
+                 style="position:absolute; top:29px; right:0px;">&#43;</div>
+            <div class="button smallButton" 
+                 id="scroll_out_button" 
+                 style="position:absolute; top:58px; right:0px;">&#45;</div>
+            <div class="button smallButton hidden" 
+                 id="roi_mode_button" 
+                 style="position:absolute; margin-top:670px; right:0px;">R</div>
         </div>
     </div>
 
@@ -349,6 +230,8 @@
         src="{{ url_for('static', filename='scripts/tinycolor.js') }}"></script>
     <script type="text/javascript" 
         src="{{ url_for('static', filename='scripts/roi.js') }}"></script>
+    <script type="text/javascript" 
+        src="{{ url_for('static', filename='scripts/earcut.min.js') }}"></script>
 
 
     <script id="shape-shader-fs" type="x-shader/x-fragment">
@@ -620,27 +503,60 @@
 
         function drawShapes(gl) {
             gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-            gl.clearColor(0, 0, 0, 0)
+            gl.clearColor(0.0, 0.0, 0.0, 0.0)
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            
+            gl.disable(gl.DEPTH_TEST);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
             var offset = g_frameViewer.offset;
             mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
             mat4.identity(mvMatrix);
             mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, g_frameViewer.zoomLevel])
     
-            for (var roiLabel in gl.rois) {
-                var thisRoi = gl.rois[roiLabel];
-                gl.uniform1f(gl.shaderProgram.opacityUniform,$('#roi_slider').val()/100.0)
-                var color = thisRoi.color;
-                gl.uniform3f(gl.shaderProgram.colorUniform,color.r/255,color.g/255,color.b/255)
-                gl.bindBuffer(gl.ARRAY_BUFFER, thisRoi.glBuffer);
-                gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, thisRoi.glBuffer.itemSize, gl.FLOAT, false, 0, 0);
-                setMatrixUniforms(gl);
-                gl.drawArrays(gl.TRIANGLE_FAN, 0, thisRoi.glBuffer.numItems);
 
-                gl.uniform1f(gl.shaderProgram.opacityUniform,1.0)
-                gl.drawArrays(gl.LINE_LOOP, 0, thisRoi.glBuffer.numItems);
+            var currentPlane = [g_frameViewer.getCurrentPlane()-1];
+            if (currentPlane[0] == -1) {
+                currentPlane = g_sequenceInfo.planes;
             }
+
+            for (var p in currentPlane){
+            for (var roiLabel in Object.keys(gl.rois)) {
+                roiLabel = Object.keys(gl.rois)[roiLabel];
+                var thisRoi = gl.rois[roiLabel];
+                if (typeof thisRoi === 'undefined') {
+                    debugger;
+                }
+                var segments = thisRoi.getSegments(currentPlane[p]);
+                var color = thisRoi.color;
+
+                gl.uniform3f(gl.shaderProgram.colorUniform,color.r/255,color.g/255,color.b/255)
+                for (var i = 0; i < segments.length; i++) {
+                    var segment = segments[i];
+                    gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
+                    gl.vertexAttribPointer(
+                            gl.shaderProgram.vertexPositionAttribute, 
+                            segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
+                    setMatrixUniforms(gl);
+                    gl.uniform1f(gl.shaderProgram.opacityUniform,$('#roi_slider').val()/100.0);
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
+                    gl.drawElements(
+                            gl.TRIANGLES, segment.indicesBuffer.numItems, 
+                            gl.UNSIGNED_SHORT, 0);
+
+                    gl.uniform1f(gl.shaderProgram.opacityUniform,1.0)
+                    gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
+                    gl.vertexAttribPointer(
+                            gl.shaderProgram.vertexPositionAttribute, 
+                            segment.boundaryBuffer.itemSize, gl.FLOAT, 
+                            false, 0, 0);
+                    setMatrixUniforms(gl);
+                    gl.drawArrays(
+                            gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+                }
+            }
+        }
         }
 
         var roiContext = createRoiContext();
@@ -650,7 +566,8 @@
             var gl  = initGL(roi_canvas[0]);
             $('#roi_slider').val(25);
             initShapeShaders(gl);
-            gl.enable(gl.DEPTH_TEST)
+            gl.enable(gl.GL_BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
             gl.render = function(){drawShapes(this)};
 
             return gl;
@@ -755,6 +672,7 @@
         }
 
         //TODO: is it possible for z projection to finish loading before x and y?
+        //this function may need to be called by a different trigger
        function imageOnload(context) {
             updateTextureData(context, context.projections.zProjection.texture,true)
             updateTextureData(context, context.projections.xProjection.texture,true)
@@ -825,6 +743,11 @@
             }).done(function(response) {
                 $('#indicator').show()
                 $('#indicator').fadeOut(1000)
+
+                if (typeof response.error !== 'undefined') {
+                    alert(response.error);
+                    return;
+                }
                 response.channel = g_sequenceInfo.channel;
                 g_sequenceInfo=response,
                 $('#frame_num_label').text(g_sequenceInfo.max)  
@@ -1020,9 +943,16 @@
         }
 
         $('#roi_load_button').click(function() {
-            var roiButton = $('#roi_button');
+            var loadButton = $(this);
+            if (loadButton.hasClass('selected')) {
+                return;
+            }
+            
             $('#roi_box').addClass('hidden');
-            roiButton.removeClass('selected');
+            $('#roi_button').removeClass('selected');
+            loadButton.addClass('selected');
+            loadButton.storeText = loadButton.text();
+            loadButton.text('loading...');
 
             var label = $('#label_select').val();
             var url = '{{ url_for('.getRoiMasks', _external=True) }}';
@@ -1031,50 +961,48 @@
                 var url = '{{ url_for('.getComponents', _external=True) }}';
             }
             var type = $('#roi_type_select').val();
-
-            if (type == "polygons") {
-                $.ajax({
-                    url: url,
-                    type: 'POST',
-                    cache: false,
-                    data: {
-                        path: g_filePath,
-                        label: $('#label_select').val()
-                    }
-                }).done(function(response) {
-                    roiButton.html(roiButton.storeHtml);
-                    roiContext = createRoiContext()
-                    roiContext.rois = {};
-                    var bufferLength = Object.keys(response).length;
-                    var roiLabels = Object.keys(response);
-                    for (var i=0; i<roiLabels.length; i++) {
-                        var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
-                        var newRoi = new roi(roiLabels[i],color);
-                        newRoi.setPoints(response[roiLabels[i]]);
-                        roiContext.rois[roiLabels[i]] = newRoi;
-                    }
-                    roiContext.render();
-                });
-            } else {
-                $.ajax({
-                    url: url,
-                    type: 'POST',
-                    cache: false,
-                    data: {
-                        path: g_filePath,
-                        label: $('#label_select').val()
-                    }
-                }).done(function(response) {
-                    roiContext = createProjectionContext('#roi_canvas');
-                    resizeBuffers(roiContext, g_sequenceInfo.width, g_sequenceInfo.height)
-                    roiContext.frameViewer = false;
-                    roiContext.rois = response;
-                    setRoiMask(Object.keys(response)[0]);
-                    $('#roi_mode_button').removeClass('hidden');
-                });
-
+            if (type == 'polygons') {
+                var url = '{{ url_for('.getRois', _external=True) }}';
             }
+
+            $.ajax({
+                url: url,
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    label: $('#label_select').val(),
+                }})
+                .done(function(response) {
+                    if (type == "polygons") {
+                        roiContext = createRoiContext()
+                        roiContext.rois = {};
+                        var bufferLength = Object.keys(response).length;
+                        var roiLabels = Object.keys(response);
+                        for (var i=0; i<roiLabels.length; i++) {
+                            var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
+                            var newRoi = new roi(roiLabels[i],color);
+                            newRoi.setPoints(response[roiLabels[i]]);
+                            roiContext.rois[roiLabels[i]] = newRoi;
+                        }
+                        roiContext.render();
+                    } else {
+                        roiContext = createProjectionContext('#roi_canvas');
+                        resizeBuffers(roiContext, g_sequenceInfo.width, g_sequenceInfo.height)
+                        roiContext.frameViewer = false;
+                        roiContext.numberRois = response.num_rois;
+                        delete response.num_rois;
+                        roiContext.rois = response;
+                        setRoiMask(Object.keys(response)[0]);
+                        $('#roi_mode_button').removeClass('hidden');
+                    }
+                })
+                .always(function() {
+                    loadButton.text(loadButton.storeText);
+                    loadButton.removeClass('selected');
+                });
         });
+
 
         $('#increase_step_button').click(function() {
             if (g_frameBuffer.frameDelta > 0) {
@@ -1250,6 +1178,7 @@
         });
 
         $('#plane_select').change(function() {
+            roiContext.render();
             fetchFrame(g_frameViewer.current);
         });
 
@@ -1266,20 +1195,26 @@
                 var rois = Object.keys(roiContext.rois);
                 var currentIndex = Math.max(0,rois.indexOf(roiContext.current));
                 if ([37,38].indexOf(e.keyCode) != -1) {
+                    e.preventDefault();
                     setRoiMask(rois[Math.max(0,currentIndex-1)]);
                 } else if ([39,40].indexOf(e.keyCode) != -1) {
+                    e.preventDefault();
                     setRoiMask(rois[Math.min(rois.length-1,currentIndex+1)]);
                 }
                 return;
             }
 
             if ((e.keyCode == 38)) {
+                e.preventDefault();
                 g_frameViewer.setCurrentPlane(g_frameViewer.getCurrentPlane()-1);
             } else if(e.keyCode == 40) {
+                e.preventDefault();
                 g_frameViewer.setCurrentPlane(g_frameViewer.getCurrentPlane()+1);
             } else if (e.keyCode == 37) {
+                e.preventDefault();
                 $('#single_reverse_button').trigger('click');
             } else if (e.keyCode == 39) {
+                e.preventDefault();
                 $('#single_step_button').trigger('click');
             }
 

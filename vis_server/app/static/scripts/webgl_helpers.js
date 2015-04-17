@@ -1,7 +1,7 @@
 function initGL(canvas) {
     var init_gl
     try {
-        init_gl = canvas.getContext("webgl",{preserveDrawingBuffer: true})
+        init_gl = canvas.getContext("webgl",{preserveDrawingBuffer: true, premultipledAlpha: false })
         init_gl.viewportWidth = canvas.width
         init_gl.viewportHeight = canvas.height
         return init_gl
