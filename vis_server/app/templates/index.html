@@ -262,12 +262,17 @@
         varying vec2 vTextureCoord;
         uniform sampler2D uSampler;
         uniform int num_channels;
+        uniform int uColorMode;
         uniform float roiOpacity;
         
         void main(void) {
             if (num_channels == 1) {
                 vec4 myTex = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
                 if (roiOpacity != 0.0) {
+                    if (uColorMode == 0) {
+                        myTex.b = 0.0;
+                        myTex.g = 0.0;
+                    }
                     float opacity = myTex.b+myTex.r+myTex.g;
                     gl_FragColor = vec4(myTex.r-myTex.r*roiOpacity,
                                         myTex.g-myTex.g*roiOpacity,
@@ -370,6 +375,8 @@
             shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler")
 
             shaderProgram.channelsUniform = gl.getUniformLocation(shaderProgram, "num_channels")
+            shaderProgram.colorModeUniform = gl.getUniformLocation(shaderProgram, "uColorMode")
+            gl.uniform1i(shaderProgram.colorModeUniform, 0)
             shaderProgram.roiOpacity = gl.getUniformLocation(shaderProgram, "roiOpacity")
             gl.shaderProgram = shaderProgram
         }
@@ -947,6 +954,8 @@
             if (loadButton.hasClass('selected')) {
                 return;
             }
+
+            clearRois();
             
             $('#roi_box').addClass('hidden');
             $('#roi_button').removeClass('selected');
@@ -956,9 +965,11 @@
 
             var label = $('#label_select').val();
             var url = '{{ url_for('.getRoiMasks', _external=True) }}';
+            var colorMode = 1;
             if (label.match('^ica.*\.npz$|^opca.*\.npz')) {
                 $('#roi_type_select').val('projections');
                 var url = '{{ url_for('.getComponents', _external=True) }}';
+                colorMode = 0;
             }
             var type = $('#roi_type_select').val();
             if (type == 'polygons') {
@@ -988,6 +999,7 @@
                         roiContext.render();
                     } else {
                         roiContext = createProjectionContext('#roi_canvas');
+                        roiContext.uniform1i(roiContext.shaderProgram.colorModeUniform, colorMode);
                         resizeBuffers(roiContext, g_sequenceInfo.width, g_sequenceInfo.height)
                         roiContext.frameViewer = false;
                         roiContext.numberRois = response.num_rois;
@@ -1191,6 +1203,8 @@
         });
 
         $(document).keypress(function(e) {
+            if ($('input').is(':focus')) return;
+
             if ($('#roi_mode_button').hasClass('selected')) {
                 var rois = Object.keys(roiContext.rois);
                 var currentIndex = Math.max(0,rois.indexOf(roiContext.current));
