@@ -508,10 +508,57 @@
         });
 
 
+        function drawPolygonRois(gl,count) {
+            var drawingInfo = gl.drawingInfo;
+            var thisRoi = gl.rois[drawingInfo.roiIndex];
+            var segments = thisRoi.getSegments(drawingInfo.planes[drawingInfo.planeIndex]);
+            var color = thisRoi.color;
+
+            if (drawingInfo.roiIndex == 0 && drawingInfo.planeIndex == 0) {
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            }
+            gl.uniform3f(gl.shaderProgram.colorUniform,color.r,color.g,color.b);
+            for (var i = 0; i < segments.length; i++) {
+                var segment = segments[i];
+                gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
+                gl.vertexAttribPointer(
+                        gl.shaderProgram.vertexPositionAttribute, 
+                        segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
+                gl.uniform1f(gl.shaderProgram.opacityUniform,drawingInfo.opacity);
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
+                gl.drawElements(
+                        gl.TRIANGLES, segment.indicesBuffer.numItems, 
+                        gl.UNSIGNED_SHORT, 0);
+
+                gl.uniform1f(gl.shaderProgram.opacityUniform,1.0);
+                gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
+                gl.vertexAttribPointer(
+                        gl.shaderProgram.vertexPositionAttribute, 
+                        segment.boundaryBuffer.itemSize, gl.FLOAT, 
+                        false, 0, 0);
+                gl.drawArrays(
+                        gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+            }
+
+            if (drawingInfo.roiIndex < gl.rois.length-1) {
+                gl.drawingInfo.roiIndex++;
+                if (count = 0) {
+                    setTimeout(function() { drawPolygonRois(gl, 250) }, 1);
+                } else {
+                    drawPolygonRois(gl, --count);
+                }
+            } else if (drawingInfo.planeIndex < drawingInfo.planes.length) {
+                gl.drawingInfo.roiIndex = 0;
+                gl.drawingInfo.planeIndex++;
+                setTimeout(function() { drawPolygonRois(gl, 250) }, 1);
+            } else {
+                gl.drawing = false;
+            }
+        }
+
         function drawShapes(gl) {
             gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
             gl.clearColor(0.0, 0.0, 0.0, 0.0)
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             
             gl.disable(gl.DEPTH_TEST);
             gl.enable(gl.BLEND);
@@ -525,30 +572,43 @@
 
             var currentPlane = [g_frameViewer.getCurrentPlane()-1];
             if (currentPlane[0] == -1) {
-                currentPlane = g_sequenceInfo.planes;
+                currentPlane = g_sequenceInfo.planes.slice(0,g_sequenceInfo.planes.length-1);
                 currentPlane.reverse();
             }
 
+            gl.drawingInfo = {
+                planes: currentPlane,
+                planeIndex: 0,
+                roiIndex: 0,
+                opacity: $('#roi_slider').val()/100.0
+            }
+
+            if (!gl.drawing) {
+                gl.drawing = true;
+                drawPolygonRois(gl);
+            }
+            
+            /*
             for (var p in currentPlane){
                 for (var j=0; j<gl.rois.length; j++) {
                     var thisRoi = gl.rois[j];
                     var segments = thisRoi.getSegments(currentPlane[p]);
                     var color = thisRoi.color;
 
-                    gl.uniform3f(gl.shaderProgram.colorUniform,color.r/255,color.g/255,color.b/255)
+                    gl.uniform3f(gl.shaderProgram.colorUniform,color.r,color.g,color.b);
                     for (var i = 0; i < segments.length; i++) {
                         var segment = segments[i];
                         gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
                         gl.vertexAttribPointer(
                                 gl.shaderProgram.vertexPositionAttribute, 
                                 segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
-                        gl.uniform1f(gl.shaderProgram.opacityUniform,$('#roi_slider').val()/100.0);
+                        gl.uniform1f(gl.shaderProgram.opacityUniform,opacity);
                         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
                         gl.drawElements(
                                 gl.TRIANGLES, segment.indicesBuffer.numItems, 
                                 gl.UNSIGNED_SHORT, 0);
 
-                        gl.uniform1f(gl.shaderProgram.opacityUniform,1.0)
+                        gl.uniform1f(gl.shaderProgram.opacityUniform,1.0);
                         gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
                         gl.vertexAttribPointer(
                                 gl.shaderProgram.vertexPositionAttribute, 
@@ -558,7 +618,7 @@
                                 gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
                     }
                 }
-            }
+            }*/
         }
 
         var roiContext = createRoiContext();
@@ -944,6 +1004,23 @@
             roiContext.projections.zProjection.texture.image.src = thisRoi.z;
         }
 
+
+        function storePolygonRoi(gl, response, roiLabels, i) {
+            var color = tinycolor({h:i*360.0/roiLabels.length, s:65, v:50}).toRgb();
+            color.r /= 255;
+            color.g /= 255;
+            color.b /= 255;
+
+            var newRoi = new roi(roiLabels[i],color);
+            newRoi.setPoints(response[roiLabels[i]]);
+            gl.rois[i] = newRoi;
+            if (i < roiLabels.length -1) {
+                setTimeout(function() {storePolygonRoi(gl, response, roiLabels, ++i)}, 5);
+            } else {
+                gl.render();
+            }
+        }
+
         $('#roi_load_button').click(function() {
             var loadButton = $(this);
             if (loadButton.hasClass('selected')) {
@@ -983,15 +1060,9 @@
                     if (type == "polygons") {
                         roiContext = createRoiContext()
                         roiContext.rois = [];
-                        var bufferLength = Object.keys(response).length;
                         var roiLabels = Object.keys(response);
-                        for (var i=0; i<roiLabels.length; i++) {
-                            var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
-                            var newRoi = new roi(roiLabels[i],color);
-                            newRoi.setPoints(response[roiLabels[i]]);
-                            roiContext.rois[i] = newRoi;
-                        }
-                        roiContext.render();
+                        storePolygonRoi(roiContext, response, roiLabels, 0);
+
                     } else {
                         roiContext = createProjectionContext('#roi_canvas');
                         roiContext.uniform1i(roiContext.shaderProgram.colorModeUniform, colorMode);
