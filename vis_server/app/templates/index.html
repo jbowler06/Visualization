@@ -27,6 +27,11 @@
                     <span>..</span>
                 </div>
             </p>
+            <div id="cycle_select_container" class="hidden">
+                <p><span class="floatLeft">Imaging Cycle:</span>
+                    <select class="floatLeft" id="cycle_select" style="width:100px; min-width:100px; margin: 0px 15px;"></select>
+                </p>
+            </div>
             <div>
                 <p><span class="floatLeft">Contrast Cutoff:</span>
                     <input type="text" 
@@ -697,6 +702,7 @@
                             frameDelta: g_frameBuffer.frameDelta,
                             normingVal: g_normingVal,
                             channel: g_sequenceInfo.channel,
+                            cycle: g_sequenceInfo.cycle,
                             sequenceId: g_frameBuffer.sequenceId
                         },
                         cache: false,
@@ -811,6 +817,7 @@
                     return;
                 }
                 response.channel = g_sequenceInfo.channel;
+                response.cycle = g_sequenceInfo.cycle;
                 g_sequenceInfo=response,
                 $('#frame_num_label').text(g_sequenceInfo.max)  
 
@@ -864,7 +871,6 @@
             clearRois();
             g_frameBuffer = new FrameBuffer(Date.now(),350,g_sequenceInfo.planes)
             g_frameBuffer.set_planes(g_sequenceInfo.planes);
-            g_filePath = $('#file_input').val().trim()
             g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
             if (!g_normingVal) {
                 alert('normalizing value unset')
@@ -906,10 +912,21 @@
                     fullPath = fullPath + '/'
                 }
                 fullPath = fullPath + file  
-                $('#file_input').val(fullPath)
             }
 
-            if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
+            if (fullPath.slice(-5) == '.sima') {
+                $('#cycle_select_container').removeClass('hidden');
+                $('#cycle_select').prop('disabled',true)
+                $.get('{{ url_for('.getCycles',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
+                    $('#cycle_select').html('')
+                    $('#cycle_select').html(html)
+                    $('#cycle_select').prop('disabled', false);
+                });
+            } else {
+                $('#cycle_select_container').addClass('hidden');
+            }
+
+            if ((fullPath.slice(-5) == '.sima') || (fullPath.slice(-2) == 'h5')) {
                 $('#channel_select').prop('disabled',true)
                 $.get('{{ url_for('.getChannels',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
                     $('#channel_select').html('')
@@ -918,6 +935,7 @@
                 });
                 fetchInfo(fullPath);
             } else {
+                $('#file_input').val(fullPath)
                 $('#file_select').prop('disabled', true);
                 $.get('{{ url_for('.getFolders',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
                     $('#file_select').html('')
@@ -929,8 +947,18 @@
 
         $('#load_dataset_button').click(function() {
             var fullPath = $('#file_input').val()
+            var file = $('#file_select').val()
+            if (file != '') {
+                if (fullPath.slice(-1) != '/') {
+                    fullPath = fullPath + '/'
+                }
+                fullPath = fullPath + file  
+            }
+            g_filePath = fullPath
+
             if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
                 g_sequenceInfo.channel = $('#channel_select').val()
+                g_sequenceInfo.cycle = $('#cycle_select').val()
                 $('#load_box').addClass('hidden')
                 $('#load_button').removeClass('selected')
                 setSelectedData()
@@ -1150,6 +1178,7 @@
                         path: g_filePath,
                         normingVal: g_normingVal,
                         channel: g_sequenceInfo.channel,
+                        cycle: g_sequenceInfo.cycle,
                         sequenceId: g_frameBuffer.sequenceId
                     }
                 }).done(function(response) {
@@ -1222,6 +1251,7 @@
                     path: g_filePath,
                     normingVal: g_normingVal,
                     channel: g_sequenceInfo.channel,
+                    cycle: g_sequenceInfo.cycle,
                     sequenceId: g_frameBuffer.sequenceId
                 }
             }).done(function(response) {

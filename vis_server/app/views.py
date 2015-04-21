@@ -149,6 +149,20 @@ def getChannels(directory):
     return render_template('select_list.html',options=channels) 
 
 
+@app.route('/getCycles/<directory>')
+def getCycles(directory):
+    ds_path = directory.replace(':!','/')
+
+    if (os.path.splitext(ds_path)[-1] == '.sima'):
+        try:
+            ds = ImagingDataset.load(ds_path)
+        except IOError:
+            return ''
+        return render_template('select_list.html',options=range(ds.num_sequences)) 
+
+    return ''
+
+
 @app.route('/getLabels', methods=['GET','POST'])
 def getLabels():
     ds_path = request.form.get('path')
@@ -314,6 +328,7 @@ def getFrames():
     sequenceId = request.form.get('sequenceId')
     channel = request.form.get('channel')
     planes = request.form.getlist('planes[]',type=int)
+    cycle = request.form.get('cycle', type=int)
 
     if planes is None:
         planes = [0]
@@ -325,7 +340,7 @@ def getFrames():
     ds = None
     if (os.path.splitext(ds_path)[-1] == '.sima'):
         ds = ImagingDataset.load(ds_path)
-        seq = ds.__iter__().next()
+        seq = ds.sequences[cycle]
         channel = ds._resolve_channel(channel)
     else:
         seq = Sequence.create('HDF5',ds_path,'tzyxc')
