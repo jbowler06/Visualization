@@ -23,10 +23,8 @@ body {
     top: 0px;
 }
 #gl_canvas {
-   /* border: thin solid #0F0;*/
 }
 #roi_canvas {
-   /* border: thin solid #F00;*/
 }   
 .floatLeft {
     float: Left;
@@ -113,6 +111,7 @@ body {
 .controls {
     display: block;
     position: absolute;
+    z-index: 10;
 }
 .loadBox {
     position: absolute;
