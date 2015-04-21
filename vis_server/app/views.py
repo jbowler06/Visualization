@@ -109,9 +109,10 @@ def getInfo():
         frame = seq._get_frame(frame_index)
         for channel in xrange(seq.shape[4]):
             subframe = frame[:,:,:,channel]
-            factor = np.percentile(subframe[np.where(np.isfinite(subframe))],98)
-            if np.isfinite(factor):
-                norm_factors['channel_'+str(channel)] += [factor]
+            if np.any(np.isfinite(subframe)):
+                factor = np.percentile(subframe[np.where(np.isfinite(subframe))],98)
+                if np.isfinite(factor):
+                    norm_factors['channel_'+str(channel)] += [factor]
 
     json = {
         'planes': range(seq.shape[1]+1),
