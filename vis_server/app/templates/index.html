@@ -521,49 +521,44 @@
             mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
             mat4.identity(mvMatrix);
             mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, g_frameViewer.zoomLevel])
-    
+            setMatrixUniforms(gl);
 
             var currentPlane = [g_frameViewer.getCurrentPlane()-1];
             if (currentPlane[0] == -1) {
                 currentPlane = g_sequenceInfo.planes;
+                currentPlane.reverse();
             }
 
             for (var p in currentPlane){
-            for (var roiLabel in Object.keys(gl.rois)) {
-                roiLabel = Object.keys(gl.rois)[roiLabel];
-                var thisRoi = gl.rois[roiLabel];
-                if (typeof thisRoi === 'undefined') {
-                    debugger;
-                }
-                var segments = thisRoi.getSegments(currentPlane[p]);
-                var color = thisRoi.color;
+                for (var j=0; j<gl.rois.length; j++) {
+                    var thisRoi = gl.rois[j];
+                    var segments = thisRoi.getSegments(currentPlane[p]);
+                    var color = thisRoi.color;
 
-                gl.uniform3f(gl.shaderProgram.colorUniform,color.r/255,color.g/255,color.b/255)
-                for (var i = 0; i < segments.length; i++) {
-                    var segment = segments[i];
-                    gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
-                    gl.vertexAttribPointer(
-                            gl.shaderProgram.vertexPositionAttribute, 
-                            segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
-                    setMatrixUniforms(gl);
-                    gl.uniform1f(gl.shaderProgram.opacityUniform,$('#roi_slider').val()/100.0);
-                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
-                    gl.drawElements(
-                            gl.TRIANGLES, segment.indicesBuffer.numItems, 
-                            gl.UNSIGNED_SHORT, 0);
+                    gl.uniform3f(gl.shaderProgram.colorUniform,color.r/255,color.g/255,color.b/255)
+                    for (var i = 0; i < segments.length; i++) {
+                        var segment = segments[i];
+                        gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
+                        gl.vertexAttribPointer(
+                                gl.shaderProgram.vertexPositionAttribute, 
+                                segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
+                        gl.uniform1f(gl.shaderProgram.opacityUniform,$('#roi_slider').val()/100.0);
+                        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
+                        gl.drawElements(
+                                gl.TRIANGLES, segment.indicesBuffer.numItems, 
+                                gl.UNSIGNED_SHORT, 0);
 
-                    gl.uniform1f(gl.shaderProgram.opacityUniform,1.0)
-                    gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
-                    gl.vertexAttribPointer(
-                            gl.shaderProgram.vertexPositionAttribute, 
-                            segment.boundaryBuffer.itemSize, gl.FLOAT, 
-                            false, 0, 0);
-                    setMatrixUniforms(gl);
-                    gl.drawArrays(
-                            gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+                        gl.uniform1f(gl.shaderProgram.opacityUniform,1.0)
+                        gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
+                        gl.vertexAttribPointer(
+                                gl.shaderProgram.vertexPositionAttribute, 
+                                segment.boundaryBuffer.itemSize, gl.FLOAT, 
+                                false, 0, 0);
+                        gl.drawArrays(
+                                gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+                    }
                 }
             }
-        }
         }
 
         var roiContext = createRoiContext();
@@ -987,14 +982,14 @@
                 .done(function(response) {
                     if (type == "polygons") {
                         roiContext = createRoiContext()
-                        roiContext.rois = {};
+                        roiContext.rois = [];
                         var bufferLength = Object.keys(response).length;
                         var roiLabels = Object.keys(response);
                         for (var i=0; i<roiLabels.length; i++) {
                             var color = tinycolor({h:i*360.0/bufferLength, s:65, v:50}).toRgb();
                             var newRoi = new roi(roiLabels[i],color);
                             newRoi.setPoints(response[roiLabels[i]]);
-                            roiContext.rois[roiLabels[i]] = newRoi;
+                            roiContext.rois[i] = newRoi;
                         }
                         roiContext.render();
                     } else {
@@ -1098,10 +1093,18 @@
                     g_frameBuffer.set_next(index);
                     playFramesFromQueue(true);
                     $('.stepButton').removeClass('selected');
+                    if (roiContext.needsRender) {
+                        roiContext.needsRender = false;
+                        roiContext.render();
+                    }
                });
            } else {
                 playFramesFromQueue(true);
                 $('.stepButton').removeClass('selected');
+                if (roiContext.needsRender) {
+                    roiContext.needsRender = false;
+                    roiContext.render();
+                }
            }
         }
 
@@ -1190,7 +1193,7 @@
         });
 
         $('#plane_select').change(function() {
-            roiContext.render();
+            roiContext.needsRender = true;
             fetchFrame(g_frameViewer.current);
         });
 
