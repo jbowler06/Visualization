@@ -24,9 +24,11 @@ function FrameViewer() {
     };
 
     this.setCurrentPlane = function(plane) {
-        this.planeSelect.val(
-                Math.min(Math.max(0,plane),this.planeSelect.attr('max')));
-        this.planeSelect.trigger('change');
+        plane = Math.min(Math.max(0,plane),this.planeSelect.attr('max'));
+        if (plane != this.getCurrentPlane()) {
+            this.planeSelect.val(plane);
+            this.planeSelect.trigger('change');
+        }
     }
 
     this.setPlaying = function(state) {

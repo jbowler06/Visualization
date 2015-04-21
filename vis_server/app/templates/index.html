@@ -1306,6 +1306,14 @@
                 $('#single_step_button').trigger('click');
             }
 
+            if ((e.charCode == 32)) {
+                if (!g_frameViewer.isPlaying()) {
+                    $('#start_button').trigger('click');
+                } else {
+                    $('#stop_button').trigger('click');
+                }
+            }
+
         });
 
     </script>
