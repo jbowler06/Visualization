@@ -171,8 +171,11 @@ def getLabels():
     except:
         return ''
 
-    with open(os.path.join(dataset.savedir,'rois.pkl'), 'rb') as f:
-        labels = pickle.load(f).keys()
+    try:
+        with open(os.path.join(dataset.savedir,'rois.pkl'), 'rb') as f:
+            labels = pickle.load(f).keys()
+    except:
+        return ''
 
     labels.extend(
         map(os.path.basename,glob.glob(os.path.join(ds_path,'ica*.npz'))))
