@@ -12,6 +12,16 @@ function FrameBuffer(sequenceId,maxLength) {
     this.incommingBuffer = [];
     this.planes = [0];
 
+    if (typeof(Array.prototype.find) === 'undefined') {
+        Array.prototype.find = function(func) {
+            for (var i = 0; i < this.length; i++) {
+                if (func(this[i],i,this)) {
+                    return this[i];
+                }
+            }
+        }
+    }
+
     this.length = function() { 
         return Object.keys(this.buffer).length 
     }
