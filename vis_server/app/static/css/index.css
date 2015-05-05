@@ -180,6 +180,125 @@ input.norming_value_input{
 #volume_button.loaded:hover {
     color: #555;
 }
-#plane_select{
+#plane_select {
     width:133px;
+}
+
+#roi_controls {
+    height: 350px;
+    width: 250px;
+    position: absolute;
+    right: 0px;
+    z-index: 10;
+    background-color: #000;
+
+    border: thin solid #0F0;
+    top: 100px;
+}
+
+.roiTab {
+    border: thin solid #0F0;
+    height: 50px;
+}
+
+.roiTabLabel {
+    width: 125px;
+}
+
+.roiTab div {
+    margin: 10px;
+}
+
+.roiTab .button {
+    color: #F00;
+}
+
+.roiTab .button.loaded {
+    color: #0F0;
+}
+
+.roiTab .button.loaded.viewing {
+    color: #000;
+    background-color: #0F0;
+}
+
+#roi_control_heading .button {
+    margin: 0px 10px;
+}
+
+#roi_controls.minified {
+    width: 15px;
+}
+
+#roi_controls .controlContainer {
+    height:330px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.arrowContainer {
+    width: 100%;
+}
+
+#roi_controls.minified .arrowContainer {
+    height: 100%;
+}
+
+.arrowContainer:hover {
+    background-color: #555;
+    cursor: pointer;
+
+    -webkit-user-select: none; /* Chrome/Safari */        
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE10+ */
+}
+
+#roi_controls.minified .controlContainer {
+    visibility: hidden;
+}
+
+#roi_controls.minified .arrowIn {
+    display: none;
+}
+
+#roi_controls .arrowOut {
+    display: none;
+}
+
+#roi_controls.minified .arrowOut {
+    display: inherit;
+}
+
+#roi_set_options {
+    border: 1px solid #0F0;
+    background-color: #000;
+    position: fixed;
+    margin-top: 32px;
+}
+
+.selectable:hover {
+    background-color: #555;
+    cursor: pointer;
+
+    -webkit-user-select: none; /* Chrome/Safari */        
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE10+ */
+}
+
+.tableButton:hover {
+    background-color: #555;
+    cursor: pointer;
+
+    -webkit-user-select: none; /* Chrome/Safari */        
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE10+ */
+}
+
+#roi_label_span {
+    font-size: 10px;
+    width: 147px;
+}
+
+#label_select {
+    width: 125px;
 }

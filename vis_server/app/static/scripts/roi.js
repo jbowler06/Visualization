@@ -2,6 +2,7 @@ function roi(label,color) {
     this.label = label;
     this.color = color;
     this.mask = {};
+    this.display = true;
 
     this.widthScale = g_frameViewer.mainProjectionWidth/g_sequenceInfo.width;
     this.widthConst = g_frameViewer.mainProjectionWidth/2;

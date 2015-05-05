@@ -88,59 +88,6 @@
                 </div>
             </p>
         </div>
-        <div class="button" id="roi_button">
-            <span>rois</span>
-        </div>
-        <div class="loadBox hidden" id="roi_box">
-            <p style="width:auto;margin:0px 5px">
-                <table class="floatLeft">
-                    <tr>
-                        <td>rois label:</td>
-                        <td>
-                            <select id="label_select"></select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>roi type:</td>
-                        <td>
-                            <select id="roi_type_select">
-                                <option val="polygons">polygons</option>
-                                <option val="projections">projections</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>shading:</td>
-                    <tr>
-                    <tr>
-                        <td colspan="2">
-                            <input type="range" 
-                                   name="roi_slider" 
-                                   id="roi_slider" 
-                                   min="0" 
-                                   max="100" 
-                                   value="0"
-                                   style="width:100%">
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div class="button floatLeft" id="roi_load_button">
-                                <span>load</span>
-                            </div>
-                        </td>
-                        <td>
-                            <div class="button floatLeft" id="clear_rois_button">
-                                <span>clear</span>
-                            </div>
-                        </td>
-                    </tr>
-                </table>
-                <div class="button smallButton floatRight" id="roi_cancel">
-                    <span>X</span>
-                </div>
-            </p>
-        </div>
         <div class="button" id="start_button"><span>start</span></div>
         <div class="button" id="stop_button"><span>stop</span></div>
         <div>
@@ -202,6 +149,92 @@
         </div>
         <div class="indicator floatLeft" id="indicator"><span>&nbsp;</span></div>
     </div>
+
+    <div id="roi_controls" class="minified"> 
+        <div class="arrowContainer">
+            <span class="arrowOut">
+                <div align="center">&nbsp;&#60;</div>
+                <div style="height:75px;">&nbsp;</div>
+                <div align="center">R</div>
+                <div align="center">O</div>
+                <div align="center">I</div>
+                <div align="center">s</div>
+            </span>
+            <span class="arrowIn">&nbsp;&#62;</span>
+        </div>
+        <div class="controlContainer floatLeft"> 
+        <div id="roi_control_heading">
+            <div class="floatLeft" style="width:147px">
+                <select id="label_select" class="floatLeft"></select>
+                <span id="roi_label_span" class="floatLeft selectable">
+                    options
+                </span>
+            </div>
+            <div class="roiPolygonsButton button smallButton floatLeft">l</div>
+            <div class="roiProjectionsButton button smallButton floatLeft">r</div>
+            <div id="roi_set_options">
+                <table>
+                    <tr>
+                        <td>shading:</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3">
+                            <input type="range" 
+                                   name="roi_slider" 
+                                   id="roi_slider" 
+                                   min="0" 
+                                   max="100" 
+                                   value="0"
+                                   style="width:220px">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>new label</td>
+                        <td><input type="text" id="roi_label_input"/></td>
+                        <td class="tableButton" id="set_roi_label_button">set</td>
+                    </tr>
+                    <tr>
+                        <td 
+                            class="tableButton"
+                            colspan="2"
+                            id="delete_roi_label_button">delete label</td>
+                    </tr>
+                    <tr>
+                        <td class="tableButton roiLoadButton" id="polygon_roi_load_button" colspan="2">load all polygons</td>
+                    </tr>
+                    <tr>
+                        <td class="tableButton roiLoadButton" 
+                            id="projection_roi_load_button" 
+                            colspan="2">load all projections</td>
+                    </tr>
+                    <tr>
+                        <td class="tableButton clearRoiButton" colspan="2">clear rois</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div style="height:300px;" class="floatLeft">
+            <div 
+                id="roi_tab_container" 
+                style="width:100%; height:100%; overflow:auto; margin:1px;">
+
+                <div id="roi_tab_template" class="roiTab hidden">
+                    <div class="roiTabLabel floatLeft">
+                        <span class="roiNumberSpan">0</span>
+                        .&nbsp;&nbsp;
+                        <span class="roiIdSpan">roi_id</span>
+                    </div>
+                    <div 
+                        class="roiPolygonsButton button smallButton floatLeft">l</div>
+                    <div 
+                        class="roiProjectionsButton button smallButton floatLeft"
+                        style="visibility: hidden">r</div>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+
     <div class="width100 height100">
         <div class="canvasContainer">
             <canvas class="webGlCanvas" id="gl_canvas" width="800" height="700"></canvas>
@@ -516,33 +549,36 @@
         function drawPolygonRois(gl,count) {
             var drawingInfo = gl.drawingInfo;
             var thisRoi = gl.rois[drawingInfo.roiIndex];
-            var segments = thisRoi.getSegments(drawingInfo.planes[drawingInfo.planeIndex]);
-            var color = thisRoi.color;
-
             if (drawingInfo.roiIndex == 0 && drawingInfo.planeIndex == 0) {
                 gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             }
-            gl.uniform3f(gl.shaderProgram.colorUniform,color.r,color.g,color.b);
-            for (var i = 0; i < segments.length; i++) {
-                var segment = segments[i];
-                gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
-                gl.vertexAttribPointer(
-                        gl.shaderProgram.vertexPositionAttribute, 
-                        segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
-                gl.uniform1f(gl.shaderProgram.opacityUniform,drawingInfo.opacity);
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
-                gl.drawElements(
-                        gl.TRIANGLES, segment.indicesBuffer.numItems, 
-                        gl.UNSIGNED_SHORT, 0);
 
-                gl.uniform1f(gl.shaderProgram.opacityUniform,1.0);
-                gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
-                gl.vertexAttribPointer(
-                        gl.shaderProgram.vertexPositionAttribute, 
-                        segment.boundaryBuffer.itemSize, gl.FLOAT, 
-                        false, 0, 0);
-                gl.drawArrays(
-                        gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+            if (thisRoi.display) {
+                var segments = thisRoi.getSegments(drawingInfo.planes[drawingInfo.planeIndex]);
+                var color = thisRoi.color;
+
+                gl.uniform3f(gl.shaderProgram.colorUniform,color.r,color.g,color.b);
+                for (var i = 0; i < segments.length; i++) {
+                    var segment = segments[i];
+                    gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
+                    gl.vertexAttribPointer(
+                            gl.shaderProgram.vertexPositionAttribute, 
+                            segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
+                    gl.uniform1f(gl.shaderProgram.opacityUniform,drawingInfo.opacity);
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
+                    gl.drawElements(
+                            gl.TRIANGLES, segment.indicesBuffer.numItems, 
+                            gl.UNSIGNED_SHORT, 0);
+
+                    gl.uniform1f(gl.shaderProgram.opacityUniform,1.0);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
+                    gl.vertexAttribPointer(
+                            gl.shaderProgram.vertexPositionAttribute, 
+                            segment.boundaryBuffer.itemSize, gl.FLOAT, 
+                            false, 0, 0);
+                    gl.drawArrays(
+                            gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+                }
             }
 
             if (drawingInfo.roiIndex < gl.rois.length-1) {
@@ -593,43 +629,11 @@
                 drawPolygonRois(gl);
             }
             
-            /*
-            for (var p in currentPlane){
-                for (var j=0; j<gl.rois.length; j++) {
-                    var thisRoi = gl.rois[j];
-                    var segments = thisRoi.getSegments(currentPlane[p]);
-                    var color = thisRoi.color;
-
-                    gl.uniform3f(gl.shaderProgram.colorUniform,color.r,color.g,color.b);
-                    for (var i = 0; i < segments.length; i++) {
-                        var segment = segments[i];
-                        gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
-                        gl.vertexAttribPointer(
-                                gl.shaderProgram.vertexPositionAttribute, 
-                                segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
-                        gl.uniform1f(gl.shaderProgram.opacityUniform,opacity);
-                        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
-                        gl.drawElements(
-                                gl.TRIANGLES, segment.indicesBuffer.numItems, 
-                                gl.UNSIGNED_SHORT, 0);
-
-                        gl.uniform1f(gl.shaderProgram.opacityUniform,1.0);
-                        gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
-                        gl.vertexAttribPointer(
-                                gl.shaderProgram.vertexPositionAttribute, 
-                                segment.boundaryBuffer.itemSize, gl.FLOAT, 
-                                false, 0, 0);
-                        gl.drawArrays(
-                                gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
-                    }
-                }
-            }*/
         }
 
         var roiContext = createRoiContext();
         function createRoiContext() {
             var roi_canvas = $('#roi_canvas');
-            g_frameViewer.initMouse(roi_canvas);
             var gl  = initGL(roi_canvas[0]);
             $('#roi_slider').val(25);
             initShapeShaders(gl);
@@ -800,6 +804,27 @@
            yProjection.vertexPositionBuffer = createSquareVertexPositionBuffer(gl,width,depth)
         }
         
+
+        function loadRoiLabels(filepath) {
+            if (typeof(filepath) === "undefined") {
+                filepath = g_filePath
+            }
+
+            $('#label_select').prop('disabled', true);
+            $.ajax({
+                url: '{{ url_for('.getLabels', _external=True) }}',
+                type: 'POST',
+                data: {
+                    path: filepath
+                },
+                cache: false
+            }).done(function(html) {
+                $('#label_select').html('')
+                $('#label_select').html(html)
+                $('#label_select').prop('disabled', false);
+            });
+        }
+
         function fetchInfo(filePath) {
             $.ajax({
                 url: '{{ url_for('.getInfo', _external=True) }}',
@@ -846,19 +871,8 @@
                    });
             });
 
-            $('#label_select').prop('disabled', true);
-            $.ajax({
-                url: '{{ url_for('.getLabels', _external=True) }}',
-                type: 'POST',
-                data: {
-                    path: filePath
-                },
-                cache: false
-            }).done(function(html) {
-                $('#label_select').html('')
-                $('#label_select').html(html)
-                $('#label_select').prop('disabled', false);
-            });
+            loadRoiLabels(filePath);
+
         }
 
         function setSelectedData() {
@@ -869,6 +883,7 @@
                 g_frameBuffer.buffer = []
             }
             clearRois();
+            g_frameViewer.initMouse($('#roi_canvas'));
             g_frameBuffer = new FrameBuffer(Date.now(),350,g_sequenceInfo.planes)
             g_frameBuffer.set_planes(g_sequenceInfo.planes);
             g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
@@ -913,6 +928,7 @@
                 }
                 fullPath = fullPath + file  
             }
+            $('#file_input').val(fullPath);
 
             if (fullPath.slice(-5) == '.sima') {
                 $('#cycle_select_container').removeClass('hidden');
@@ -927,6 +943,7 @@
             }
 
             if ((fullPath.slice(-5) == '.sima') || (fullPath.slice(-2) == 'h5')) {
+                $('#file_select').html('')
                 $('#channel_select').prop('disabled',true)
                 $.get('{{ url_for('.getChannels',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
                     $('#channel_select').html('')
@@ -948,12 +965,13 @@
         $('#load_dataset_button').click(function() {
             var fullPath = $('#file_input').val()
             var file = $('#file_select').val()
-            if (file != '') {
+            if (file && file != '') {
                 if (fullPath.slice(-1) != '/') {
                     fullPath = fullPath + '/'
                 }
                 fullPath = fullPath + file  
             }
+            $('file_input').val(fullPath);
             g_filePath = fullPath
 
             if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
@@ -1032,8 +1050,58 @@
             roiContext.projections.zProjection.texture.image.src = thisRoi.z;
         }
 
+        function createRoiTab(number,id) {
+            var thisId = 'roi_tab_'+number.toString()
+            $('#roi_tab_template').clone(true)
+                                  .attr('id',thisId)
+                                  .removeClass('hidden')
+                                  .addClass('activeRoiTab')
+                                  .appendTo('#roi_tab_container');
+            $('#' + thisId + ' .roiNumberSpan').text(number);
+            $('#' + thisId + ' .roiIdSpan').text(id);
+        }
+
+        $('.roiPolygonsButton').click(function() {
+            var thisParent = $(this).parent().attr('id');
+            if (thisParent == "roi_control_heading") {
+                if (! $(this).hasClass('on')){
+                    $(this).addClass('on');
+                    roiContext.rois.every(function(e,i,a) { e.display = true; return true;});
+                    $('#roi_tab_container .roiPolygonsButton').addClass('viewing');
+                } else {
+                    $(this).removeClass('on');
+                    roiContext.rois.every(function(e,i,a) { e.display = false; return true});
+                    $('#roi_tab_container .roiPolygonsButton').removeClass('viewing');
+                }
+            } else {
+                var roiNum = parseInt(thisParent.substring(8));
+                if ($(this).hasClass('viewing')) {
+                    roiContext.rois[roiNum].display = false;
+                    roiContext.render();
+                    $(this).removeClass('viewing');
+                } else {
+                    roiContext.rois[roiNum].display = true;
+                    $(this).addClass('viewing');
+                }
+            }
+            roiContext.render();
+        });
+
+        function setRoiLoaded(number) {
+            var thisId = 'roi_tab_'+number.toString()
+            $('#'+thisId+' .roiPolygonsButton').addClass('loaded');
+        }
+
+        function setRoiViewing(number) {
+            var thisId = 'roi_tab_'+number.toString()
+            $('#'+thisId+' .roiPolygonsButton').addClass('viewing');
+        }
 
         function storePolygonRoi(gl, response, roiLabels, i) {
+            createRoiTab(i,roiLabels[i]);
+            setRoiLoaded(i);
+            setRoiViewing(i);
+
             var color = tinycolor({h:i*360.0/roiLabels.length, s:65, v:50}).toRgb();
             color.r /= 255;
             color.g /= 255;
@@ -1042,6 +1110,8 @@
             var newRoi = new roi(roiLabels[i],color);
             newRoi.setPoints(response[roiLabels[i]]);
             gl.rois[i] = newRoi;
+
+            $('#roi_control_heading roiPolygonsButton').addClass('on');
             if (i < roiLabels.length -1) {
                 setTimeout(function() {storePolygonRoi(gl, response, roiLabels, ++i)}, 5);
             } else {
@@ -1049,13 +1119,15 @@
             }
         }
 
-        $('#roi_load_button').click(function() {
+
+        $('.roiLoadButton').click(function() {
             var loadButton = $(this);
             if (loadButton.hasClass('selected')) {
                 return;
             }
 
             clearRois();
+            var label = $('#label_select').val();
             
             $('#roi_box').addClass('hidden');
             $('#roi_button').removeClass('selected');
@@ -1063,15 +1135,18 @@
             loadButton.storeText = loadButton.text();
             loadButton.text('loading...');
 
-            var label = $('#label_select').val();
+            if ($(this).attr('id') == 'polygon_roi_load_button') {
+                var type = 'polygons';
+            } else {
+                var type = 'projections';
+            }
+
             var url = '{{ url_for('.getRoiMasks', _external=True) }}';
             var colorMode = 1;
             if (label.match('^ica.*\.npz$|^opca.*\.npz')) {
-                $('#roi_type_select').val('projections');
                 var url = '{{ url_for('.getComponents', _external=True) }}';
                 colorMode = 0;
             }
-            var type = $('#roi_type_select').val();
             if (type == 'polygons') {
                 var url = '{{ url_for('.getRois', _external=True) }}';
             }
@@ -1082,7 +1157,7 @@
                 cache: false,
                 data: {
                     path: g_filePath,
-                    label: $('#label_select').val(),
+                    label: label,
                 }})
                 .done(function(response) {
                     if (type == "polygons") {
@@ -1212,11 +1287,12 @@
             roiContext.rois = {};
             $('#roi_mode_button').removeClass('selected');
             $('#roi_mode_button').addClass('hidden');
+            $('.activeRoiTab').remove();
             roiContext.clear(roiContext.COLOR_BUFFER_BIT | roiContext.DEPTH_BUFFER_BIT) ;
             roiContext.render = function() {}
         }
 
-        $('#clear_rois_button').click(function() {
+        $('.clearRoiButton').click(function() {
             clearRois();
         });
 
@@ -1306,6 +1382,79 @@
             }
         });
 
+        $('#roi_controls .arrowContainer').click(function() {
+            var control = $('#roi_controls')
+            if (control.hasClass('minified')) {
+                control.removeClass('minified');
+            } else {
+                control.addClass('minified');
+            }
+        });
+
+        $('#roi_label_span').click(function() {
+            var setOptions = $('#roi_set_options');
+            if (setOptions.hasClass('hidden')) {
+                setOptions.removeClass('hidden');
+            } else {
+                setOptions.addClass('hidden');
+            }
+        });
+
+
+        $('#set_roi_label_button').click(function() {
+            var labelSelect = $('#label_select');
+            labelSelect.prop('disabled', true);
+            var newLabel = $('#roi_label_input').val();
+            $.ajax({
+                url: '{{ url_for('.setRoiLabel', _external=True) }}',
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    oldLabel: labelSelect.val(),
+                    newLabel: newLabel
+                }
+            }).done(function(html) {
+                labelSelect
+                    .html('')
+                    .html(html);
+                labelSelect.find('option[value="' + newLabel + '"]').prop('selected',true);
+            }).always(function() {
+                labelSelect.prop('disabled', false);
+            });
+        });
+
+
+        $('#delete_roi_label_button').click(function() {
+            var deleteButton = $(this)
+            if (deleteButton.hasClass('selected')) {
+                return;
+            }
+            deleteButton.addClass('selected')
+            var selected_value = $('#label_select').val()
+            $('#label_select option[value="' + selected_value + '"]').remove();
+            
+            $.ajax({
+                url: '{{ url_for('.deleteRoiSet', _external=True) }}',
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    label: $('#label_select').val()
+                }
+            }).done(function() {
+
+            }).always(function() {
+                deleteButton.removeClass('selected');
+            });
+        });
+
+        /*$('#label_select').change(function() {
+            var labelSelect = $(this);
+            labelSelect.prop('disabled',true);
+            
+        });*/
+
         $(document).keypress(function(e) {
             if ($('input').is(':focus')) return;
 
@@ -1337,6 +1486,7 @@
             }
 
             if ((e.charCode == 32)) {
+                e.preventDefault();
                 if (!g_frameViewer.isPlaying()) {
                     $('#start_button').trigger('click');
                 } else {

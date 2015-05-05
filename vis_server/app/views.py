@@ -171,14 +171,24 @@ def getLabels():
     except:
         return ''
 
-    labels = dataset.ROIs.keys()
+    with open(os.path.join(dataset.savedir,'rois.pkl'), 'rb') as f:
+        labels = pickle.load(f).keys()
 
     labels.extend(
         map(os.path.basename,glob.glob(os.path.join(ds_path,'ica*.npz'))))
     labels.extend(
         map(os.path.basename,glob.glob(os.path.join(ds_path,'opca*.npz'))))
 
-    return render_template('select_list.html',options=labels)
+    return render_template('select_list.html',options=['']+labels)
+
+
+@app.route('/getRoiList', methods=['GET','POST'])
+def getRoiList():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')
+
+    dataset = ImagingDataset.load(ds_path)
+    rois = dataset.ROIs[label]
 
 
 @app.route('/getComponenets', methods=['GET','POST'])
@@ -405,6 +415,37 @@ def getFrames():
             }
 
     return jsonify(end=end,sequenceId=sequenceId,**frames)
+
+
+@app.route('/setRoiLabel', methods=['GET','POST'])
+def setRoiLabel():
+    ds_path = request.form.get('path')
+    old_label = request.form.get('oldLabel')
+    new_label = request.form.get('newLabel')
+
+    dataset = ImagingDataset.load(ds_path)
+    dataset.add_ROIs(dataset.ROIs[old_label], label=new_label)
+
+    labels = dataset.ROIs.keys()
+
+    labels.extend(
+        map(os.path.basename,glob.glob(os.path.join(ds_path,'ica*.npz'))))
+    labels.extend(
+        map(os.path.basename,glob.glob(os.path.join(ds_path,'opca*.npz'))))
+
+    return render_template('select_list.html',options=['']+labels)
+
+
+
+@app.route('/deleteRoiSet', methods=['GET','POST'])
+def deleteRoiSet():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')
+
+    dataset = ImagingDataset.load(ds_path)
+    dataset.delete_ROIs(label)
+
+    return jsonify(result='success')
 
 
 @app.route('/getFolders/<directory>')
