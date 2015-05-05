@@ -52,7 +52,7 @@ function FrameBuffer(sequenceId,maxLength) {
     }
 
     this.next = function() { 
-        return this.current + this.frameDelta
+        return Math.max(this.current + this.frameDelta,-1)
     }
 
     /*
