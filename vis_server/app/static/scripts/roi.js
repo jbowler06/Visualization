@@ -16,7 +16,7 @@ function roi(label,color) {
         this.type = 'polygons';
         for (var plane in roiPoints) {
             this.segments[parseInt(plane)] = [];
-            for (var seg in roiPoints[plane]) {
+            for (var seg = 0; seg  < roiPoints[plane].length; seg++) {
                 var segment = {}
                 segment.polyBuffer = roiContext.createBuffer();
                 segment.polyBuffer.points = [];

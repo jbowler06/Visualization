@@ -1455,7 +1455,7 @@
             
         });*/
 
-        $(document).keypress(function(e) {
+        $(document).keydown(function(e) {
             if ($('input').is(':focus')) return;
 
             if ($('#roi_mode_button').hasClass('selected')) {
@@ -1485,7 +1485,7 @@
                 $('#single_step_button').trigger('click');
             }
 
-            if ((e.charCode == 32)) {
+            if ((e.charCode == 32)||(e.keyCode == 32)) {
                 e.preventDefault();
                 if (!g_frameViewer.isPlaying()) {
                     $('#start_button').trigger('click');
