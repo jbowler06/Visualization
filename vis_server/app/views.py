@@ -30,6 +30,7 @@ from flask import make_response
 from .decorators import async
 from sima import ImagingDataset
 from sima import Sequence
+from sima.ROI import ROIList
 
 from PIL import Image
 import StringIO
@@ -314,8 +315,8 @@ def getRois():
     
     dataset = ImagingDataset.load(ds_path)
     convertedRois = {}
-    rois = dataset.ROIs[label]
-    
+    rois = ROIList.load(os.path.join(dataset.savedir,'rois.pkl'),label=label)
+
     for i,roi in enumerate(rois):
         if roi.label is None:
             roi.label = i
