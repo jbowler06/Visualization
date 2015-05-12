@@ -239,6 +239,7 @@
         <div class="canvasContainer">
             <canvas class="webGlCanvas" id="gl_canvas" width="800" height="700"></canvas>
             <canvas class="webGlCanvas" id="roi_canvas" width="800" height="700"></canvas>
+            <canvas class="webGlCanvas" id="positioning_canvas" width="800" height="700"></canvas>
             <div class="button smallButton" 
                  id="volume_button" 
                  style="position:absolute; top:0px; right:0px;">V</div>
@@ -290,6 +291,7 @@
 
         void main(void) {
             gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+            gl_PointSize = 5.0;
         }
     </script>
 
@@ -330,6 +332,16 @@
             }
         }
     </script>
+
+
+    <script id="color-shader-fs" type="x-shader/x-fragment">
+        precision mediump float;
+
+        void main(void) {
+            gl_FragColor = vec4(0.0,1.0,0.0,1.0);
+        }
+    </script>
+
 
     <script id="shader-vs" type="x-shader/x-vertex">
         attribute vec3 aVertexPosition;
@@ -502,6 +514,45 @@
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
         }
 
+        function drawColorMap(gl) {
+            gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
+            gl.clearColor(0,0,0,0)
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+            var zProjection = gl.projections.zProjection;
+            var xProjection = gl.projections.xProjection;
+            var yProjection = gl.projections.yProjection;
+         
+            var translate_y = g_frameViewer.mainProjectionHeight/2 + 0.35;
+            var translate_x = g_frameViewer.mainProjectionWidth/2 + 0.35;
+            var offset = g_frameViewer.offset;
+
+            mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix)
+            mat4.identity(mvMatrix)
+            mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, g_frameViewer.zoomLevel])
+            setMatrixUniforms(gl)
+            
+            gl.bindBuffer(gl.ARRAY_BUFFER, zProjection.vertexPositionBuffer)
+            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
+                    zProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
+            setMatrixUniforms(gl)
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, zProjection.vertexPositionBuffer.numItems)
+
+            mat4.translate(mvMatrix, [translate_x, 0.0, 0.0])
+            setMatrixUniforms(gl)
+            gl.bindBuffer(gl.ARRAY_BUFFER, xProjection.vertexPositionBuffer)
+            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
+                    xProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, xProjection.vertexPositionBuffer.numItems)
+
+            mat4.translate(mvMatrix, [-translate_x, -translate_y, 0.0])
+            setMatrixUniforms(gl)
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, yProjection.vertexPositionBuffer)
+            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
+                    yProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
+        }
+
         function createProjectionContext(canvas_id) {
             var gl = initGL($(canvas_id)[0]);
             gl.render = function() {drawScene(this)};
@@ -540,11 +591,82 @@
             return gl;
         }
 
+
         $("#gl_canvas").ready(function webGLStart (){
             frameContext = createProjectionContext('#gl_canvas');
             frameContext.frameViewer = true;
         });
 
+
+        function createPositioningContext(canvas_id) {
+            var gl = initGL($(canvas_id)[0]);
+            gl.render = function() {drawColorMap(this)};
+            initShaders(gl, 'color-shader-fs')
+            gl.projections = {}
+
+            gl.projections.zProjection = {
+                vertexPositionBuffer: 
+                    createSquareVertexPositionBuffer(gl,2.0,2.0),
+            }
+
+            gl.projections.xProjection = {
+                vertexPositionBuffer: 
+                    createSquareVertexPositionBuffer(gl,0.5,2.0),
+            }           
+
+            gl.projections.yProjection = {
+                vertexPositionBuffer: 
+                    createSquareVertexPositionBuffer(gl,2.0,0.5),
+            }           
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0)
+            gl.enable(gl.DEPTH_TEST)
+
+            return gl;
+        }
+
+        var positioningContext;
+        $("#positioning_canvas").ready(function webGLStart (){
+            positioningContext = createPositioningContext('#positioning_canvas');
+        });
+
+        //TODO: move ROI drawing functions into ROI.js
+        function drawSegmentSurface(gl,drawingInfo,segment) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
+            gl.vertexAttribPointer(
+                    gl.shaderProgram.vertexPositionAttribute, 
+                    segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
+            gl.uniform1f(gl.shaderProgram.opacityUniform,drawingInfo.opacity);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
+            gl.drawElements(
+                    gl.TRIANGLES, segment.indicesBuffer.numItems, 
+                    gl.UNSIGNED_SHORT, 0);
+        }
+
+
+        function drawSegmentBoundary(gl,drawingInfo,segment) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
+            gl.uniform1f(gl.shaderProgram.opacityUniform,1.0);
+            gl.vertexAttribPointer(
+                gl.shaderProgram.vertexPositionAttribute, 
+                segment.boundaryBuffer.itemSize, gl.FLOAT, 
+                    false, 0, 0);
+            gl.drawArrays(
+                    gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+        }
+
+        function drawSegmentBoundaryPoints(gl,drawingInfo,segment) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
+            gl.uniform1f(gl.shaderProgram.opacityUniform,1.0);
+            gl.vertexAttribPointer(
+                gl.shaderProgram.vertexPositionAttribute, 
+                segment.boundaryBuffer.itemSize, gl.FLOAT, 
+                    false, 0, 0);
+            gl.drawArrays(
+                    gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+            gl.drawArrays(
+                    gl.POINTS, 0, segment.boundaryBuffer.numItems);
+        }
 
         function drawPolygonRois(gl,count) {
             var drawingInfo = gl.drawingInfo;
@@ -560,24 +682,8 @@
                 gl.uniform3f(gl.shaderProgram.colorUniform,color.r,color.g,color.b);
                 for (var i = 0; i < segments.length; i++) {
                     var segment = segments[i];
-                    gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
-                    gl.vertexAttribPointer(
-                            gl.shaderProgram.vertexPositionAttribute, 
-                            segment.polyBuffer.itemSize, gl.FLOAT, false, 0, 0);
-                    gl.uniform1f(gl.shaderProgram.opacityUniform,drawingInfo.opacity);
-                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
-                    gl.drawElements(
-                            gl.TRIANGLES, segment.indicesBuffer.numItems, 
-                            gl.UNSIGNED_SHORT, 0);
-
-                    gl.uniform1f(gl.shaderProgram.opacityUniform,1.0);
-                    gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
-                    gl.vertexAttribPointer(
-                            gl.shaderProgram.vertexPositionAttribute, 
-                            segment.boundaryBuffer.itemSize, gl.FLOAT, 
-                            false, 0, 0);
-                    gl.drawArrays(
-                            gl.LINE_LOOP, 0, segment.boundaryBuffer.numItems);
+                    drawSegmentSurface(gl,drawingInfo,segment);
+                    drawSegmentBoundary(gl,drawingInfo,segment);
                 }
             }
 
@@ -1449,11 +1555,6 @@
             });
         });
 
-        /*$('#label_select').change(function() {
-            var labelSelect = $(this);
-            labelSelect.prop('disabled',true);
-            
-        });*/
 
         $(document).keydown(function(e) {
             if ($('input').is(':focus')) return;
@@ -1495,6 +1596,13 @@
             }
 
         });
+
+    $('#roi_canvas').click(function(e) {
+        var parentOffset = $(this).parent().offset();
+        var relX = e.pageX - parentOffset.left;
+        var relY = e.pageY - parentOffset.top;
+        alert(relX + ', ' + relY)
+    })
 
     </script>
 
