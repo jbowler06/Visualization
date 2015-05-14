@@ -945,7 +945,7 @@
                 $('#buffering_warning').text('buffering.. please wait')
             }
 
-            var newUrl = '/index?dataset=' + encodeURIComponent(g_filePath) +
+            var newUrl = '{{ url_for('.index',_external=True) }}?dataset=' + encodeURIComponent(g_filePath) +
                         '&channel=' + encodeURIComponent(g_sequenceInfo.channel) +
                         '&cycle=' + encodeURIComponent(g_sequenceInfo.cycle) +
                         '&cutoff1=' + encodeURIComponent(g_normingVal[0]) + 
