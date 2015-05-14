@@ -12,7 +12,10 @@
         <div class="loadBox" id="load_box">
             <p>file selection:</p>
             <p style="width:auto;margin:0px 5px">
-                <input type="text" id="file_input" class="textInput floatLeft">
+                <input 
+                    type="text" 
+                    id="file_input" 
+                    class="textInput floatLeft">
                 <div class="button smallButton floatLeft" id="file_get">
                     <span>go</span>
                 </div>
@@ -29,7 +32,11 @@
             </p>
             <div id="cycle_select_container" class="hidden">
                 <p><span class="floatLeft">Imaging Cycle:</span>
-                    <select class="floatLeft" id="cycle_select" style="width:100px; min-width:100px; margin: 0px 15px;"></select>
+                    <select 
+                        class="floatLeft" 
+                        id="cycle_select" 
+                        style="width:100px; min-width:100px; margin: 0px 15px;">
+                    </select>
                 </p>
             </div>
             <div>
@@ -200,7 +207,10 @@
                             id="delete_roi_label_button">delete label</td>
                     </tr>
                     <tr>
-                        <td class="tableButton roiLoadButton" id="polygon_roi_load_button" colspan="2">load all polygons</td>
+                        <td 
+                            class="tableButton roiLoadButton" 
+                            id="polygon_roi_load_button" 
+                            colspan="2">load all polygons</td>
                     </tr>
                     <tr>
                         <td class="tableButton roiLoadButton" 
@@ -387,7 +397,6 @@
         }
 
 
-
         function initShaders(gl, fragShader) {
             var fragmentShader = getShader(gl, fragShader)
             var vertexShader = getShader(gl, "shader-vs")
@@ -543,6 +552,29 @@
         $("#gl_canvas").ready(function webGLStart (){
             frameContext = createProjectionContext('#gl_canvas');
             frameContext.frameViewer = true;
+
+            {% if dataset %}
+                $('#file_input').val(decodeURIComponent('{{ dataset }}'));
+                $('#file_get').trigger('click');
+
+                $('#load_dataset_button').attr('auto_click', 'true');
+
+                {% if channel %}
+                    $('#channel_select').attr('set_val','{{ channel }}');
+                {% endif %}
+
+                {% if cycle %}
+                    $('#cycle_select').attr('set_val','{{ cycle }}');
+                {% endif %}
+
+                {% if cutoff1 %}
+                    $('#ch1_norm_input').attr('set_val','{{ cutoff1 }}');
+                {% endif %}
+
+                {% if cutoff2 %}
+                    $('#ch2_norm_input').attr('set_val','{{ cutoff2 }}');
+                {% endif %}
+            {% endif %}
         });
 
 
@@ -847,12 +879,24 @@
                 $('#frame_num_label').text(g_sequenceInfo.max)  
 
                 if (response['channel_0']) {
-                    $('#ch1_norm_input').val(response['channel_0'])
+                    var chan1CutoffInput = $('#ch1_norm_input');
+                    if (typeof(chan1CutoffInput.attr('set_val')) !== 'undefined') {
+                        chan1CutoffInput.val(chan1CutoffInput.attr('set_val'));
+                        chan1CutoffInput.removeAttr('set_val');
+                    } else {
+                        chan1CutoffInput.val(response['channel_0'])
+                    }
                 }
 
                 if (response['channel_1']) {
-                    $('#ch2_norm_input').removeClass('hidden');
-                    $('#ch2_norm_input').val(response['channel_1'])
+                    var chan2CutoffInput = $('#ch2_norm_input');
+                    chan2CutoffInput.removeClass('hidden');
+                    if (typeof(chan2CutoffInput.attr('set_val')) !== 'undefined') {
+                        chan2CutoffInput.val(chan2CutoffInput.attr('set_val'));
+                        chan2CutoffInput.removeAttr('set_val');
+                    } else {
+                        chan2CutoffInput.val(response['channel_1'])
+                    }
                 } else {
                     $('#ch2_norm_input').addClass('hidden');
                 }
@@ -860,7 +904,6 @@
                 fetching = true
                 resizeBuffers(frameContext,response.width,response.height)
                 $('#frame_slider').attr('max',g_sequenceInfo.max)
-                $('#load_dataset_button').removeClass('hidden');
 
                 $('#plane_select').html('');
                 $('#plane_select').attr('max',Math.max.apply(null,response.planes))
@@ -869,6 +912,14 @@
                        .append($('<option>', { plane : plane })
                        .text(plane)); 
                    });
+
+                var loadButton = $('#load_dataset_button');
+                if (typeof(loadButton.attr('auto_click')) !== 'undefined') {
+                    loadButton.removeAttr('auto_click');
+                    loadButton.trigger('click');
+                } else {
+                    loadButton.removeClass('hidden');
+                }
             });
 
             loadRoiLabels(filePath);
@@ -893,6 +944,13 @@
             if (g_filePath) {
                 $('#buffering_warning').text('buffering.. please wait')
             }
+
+            var newUrl = '/index?dataset=' + encodeURIComponent(g_filePath) +
+                        '&channel=' + encodeURIComponent(g_sequenceInfo.channel) +
+                        '&cycle=' + encodeURIComponent(g_sequenceInfo.cycle) +
+                        '&cutoff1=' + encodeURIComponent(g_normingVal[0]) + 
+                        '&cutoff2=' + encodeURIComponent(g_normingVal[1]);
+            window.history.pushState("string","dataset",newUrl);
 
             if ($('#channel_select').val() == 'overlay') {
                 zProjection.textureCoordBuffer = createTextureCoordBuffer(frameContext, 2)
@@ -934,9 +992,14 @@
                 $('#cycle_select_container').removeClass('hidden');
                 $('#cycle_select').prop('disabled',true)
                 $.get('{{ url_for('.getCycles',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
-                    $('#cycle_select').html('')
-                    $('#cycle_select').html(html)
-                    $('#cycle_select').prop('disabled', false);
+                    var cycleSelect = $('#cycle_select');
+                    cycleSelect.html('');
+                    cycleSelect.html(html);
+                    if (typeof(cycleSelect.attr('set_val')) !== 'undefined') {
+                        cycleSelect.val(cycleSelect.attr('set_val'));
+                        cycleSelect.removeAttr('set_val');
+                    }
+                    cycleSelect.prop('disabled', false);
                 });
             } else {
                 $('#cycle_select_container').addClass('hidden');
@@ -945,10 +1008,15 @@
             if ((fullPath.slice(-5) == '.sima') || (fullPath.slice(-2) == 'h5')) {
                 $('#file_select').html('')
                 $('#channel_select').prop('disabled',true)
-                $.get('{{ url_for('.getChannels',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
-                    $('#channel_select').html('')
-                    $('#channel_select').html(html)
-                    $('#channel_select').prop('disabled', false);
+                    $.get('{{ url_for('.getChannels',directory='',_external=True)}}'+fullPath.replace(/\//g , ":!"),function(html) {
+                    var channelSelect = $('#channel_select');
+                    channelSelect.html('');
+                    channelSelect.html(html);
+                    if (typeof(channelSelect.attr('set_val')) !== 'undefined') {
+                        channelSelect.val(channelSelect.attr('set_val'));
+                        channelSelect.removeAttr('set_val');
+                    } 
+                    channelSelect.prop('disabled', false);
                 });
                 fetchInfo(fullPath);
             } else {
@@ -963,8 +1031,8 @@
         }
 
         $('#load_dataset_button').click(function() {
-            var fullPath = $('#file_input').val()
-            var file = $('#file_select').val()
+            var fullPath = $('#file_input').val();
+            var file = $('#file_select').val();
             if (file && file != '') {
                 if (fullPath.slice(-1) != '/') {
                     fullPath = fullPath + '/'

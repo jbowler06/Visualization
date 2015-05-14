@@ -81,8 +81,13 @@ def convertToColorB64Jpeg(arr, quality=100):
 @app.route('/')
 @app.route('/index')
 def index():
-    return render_template('index.html')
-    #return render_template('webgl_lesson1.html')
+    ds = request.args.get('dataset')
+    channel = request.args.get('channel')
+    cycle = request.args.get('cycle')
+    cutoff1 = request.args.get('cutoff1')
+    cutoff2 = request.args.get('cutoff2')
+
+    return render_template('index.html',dataset=ds,channel=channel,cycle=cycle,cutoff1=cutoff1,cutoff2=cutoff2)
 
 @app.route('/getInfo', methods=['GET','POST'])
 def getInfo():
