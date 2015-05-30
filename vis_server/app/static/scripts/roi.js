@@ -11,8 +11,10 @@ function roi(label,color) {
     this.heightConst = g_frameViewer.mainProjectionHeight-g_frameViewer.mainProjectionHeight/2;
     
     this.segments = []
+    this.points = []
 
     this.setPoints = function(roiPoints) {
+        this.points = roiPoints;
         this.type = 'polygons';
         for (var plane in roiPoints) {
             this.segments[parseInt(plane)] = [];
@@ -61,6 +63,20 @@ function roi(label,color) {
                 this.segments[parseInt(plane)].push(segment);
             }
         }
+    }
+
+    this.addPoint = function(plane,segment,point) {
+        
+        if (typeof(this.points[plane]) === "undefined") {
+            this.points[plane] = [];
+        }
+
+        if (typeof(this.points[plane][segment]) === "undefined") {
+            this.points[plane][segment] = [];
+        }
+
+        this.points[plane][segment].push(point);
+        this.setPoints(this.points);
     }
 
     this.getSegments = function(plane) {

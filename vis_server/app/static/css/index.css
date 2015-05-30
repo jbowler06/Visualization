@@ -26,6 +26,9 @@ body {
 }
 #roi_canvas {
 }   
+#positioning_canvas {
+    display: none;
+}
 .floatLeft {
     float: Left;
 }

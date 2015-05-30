@@ -218,6 +218,11 @@
                             colspan="2">load all projections</td>
                     </tr>
                     <tr>
+                        <td class="tableButton" 
+                            id="draw_roi_button" 
+                            colspan="2">draw roi</td>
+                    </tr>
+                    <tr>
                         <td class="tableButton clearRoiButton" colspan="2">clear rois</td>
                     </tr>
                 </table>
@@ -283,6 +288,32 @@
         src="{{ url_for('static', filename='scripts/earcut.min.js') }}"></script>
 
 
+    <script id="colormap-shader-fs" type="x-shader/x-fragment">
+        precision mediump float;
+        varying vec2 vTextureCoord;
+
+        void main(void) {
+            gl_FragColor = vec4(vTextureCoord.s, vTextureCoord.t, 0.5, 1.0);
+        }
+    </script>
+
+
+    <script id="colormap-shader-vs" type="x-shader/x-vertex">
+        attribute vec3 aVertexPosition;
+        attribute vec2 aTextureCoord;
+
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
+
+        varying vec2 vTextureCoord;
+
+        void main(void) {
+            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+            vTextureCoord = aTextureCoord;
+        }
+    </script>
+
+
     <script id="shape-shader-fs" type="x-shader/x-fragment">
         precision mediump float;
         uniform vec3 uColor;
@@ -292,6 +323,7 @@
             gl_FragColor = vec4(uColor.rgb*uOpacity,uOpacity);
         }
     </script>
+
 
     <script id="shape-shader-vs" type="x-shader/x-vertex">
         attribute vec3 aVertexPosition;
@@ -340,15 +372,6 @@
                     gl_FragColor = vec4(0.0,0.0,0.0,0.0);
                 }
             }
-        }
-    </script>
-
-
-    <script id="color-shader-fs" type="x-shader/x-fragment">
-        precision mediump float;
-
-        void main(void) {
-            gl_FragColor = vec4(0.0,1.0,0.0,1.0);
         }
     </script>
 
@@ -523,44 +546,35 @@
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
         }
 
-        function drawColorMap(gl) {
-            gl.viewport(0,0, gl.viewportWidth, gl.viewportHeight)
-            gl.clearColor(0,0,0,0)
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-            var zProjection = gl.projections.zProjection;
-            var xProjection = gl.projections.xProjection;
-            var yProjection = gl.projections.yProjection;
-         
+        function drawColorMap(gl, offset) {
             var translate_y = g_frameViewer.mainProjectionHeight/2 + 0.35;
             var translate_x = g_frameViewer.mainProjectionWidth/2 + 0.35;
             var offset = g_frameViewer.offset;
 
-            mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix)
+            gl.squareVertexPositionBuffer = createSquareVertexPositionBuffer(
+                gl,g_frameViewer.mainProjectionWidth,g_frameViewer.mainProjectionHeight);
+            gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+            gl.clearColor(0, 0, 0, 0)
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.textureCoordBuffer = createTextureCoordBuffer(gl);
+
+            mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
             mat4.identity(mvMatrix)
             mat4.translate(mvMatrix, [-0.25+offset.x, 0.25+offset.y, g_frameViewer.zoomLevel])
             setMatrixUniforms(gl)
-            
-            gl.bindBuffer(gl.ARRAY_BUFFER, zProjection.vertexPositionBuffer)
-            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
-                    zProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
-            setMatrixUniforms(gl)
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, zProjection.vertexPositionBuffer.numItems)
 
-            mat4.translate(mvMatrix, [translate_x, 0.0, 0.0])
-            setMatrixUniforms(gl)
-            gl.bindBuffer(gl.ARRAY_BUFFER, xProjection.vertexPositionBuffer)
-            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
-                    xProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, xProjection.vertexPositionBuffer.numItems)
+            gl.bindBuffer(gl.ARRAY_BUFFER, gl.squareVertexPositionBuffer);
+            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, gl.squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
-            mat4.translate(mvMatrix, [-translate_x, -translate_y, 0.0])
-            setMatrixUniforms(gl)
 
-            gl.bindBuffer(gl.ARRAY_BUFFER, yProjection.vertexPositionBuffer)
-            gl.vertexAttribPointer(gl.shaderProgram.vertexPositionAttribute, 
-                    yProjection.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0)
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, yProjection.vertexPositionBuffer.numItems)
+            gl.bindBuffer(gl.ARRAY_BUFFER, gl.textureCoordBuffer);
+            gl.vertexAttribPointer(gl.shaderProgram.textureCoordAttribute, gl.textureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+            setMatrixUniforms(gl);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, gl.squareVertexPositionBuffer.numItems);
         }
+
 
         function createProjectionContext(canvas_id) {
             var gl = initGL($(canvas_id)[0]);
@@ -632,27 +646,10 @@
 
         function createPositioningContext(canvas_id) {
             var gl = initGL($(canvas_id)[0]);
-            gl.render = function() {drawColorMap(this)};
-            initShaders(gl, 'color-shader-fs')
-            gl.projections = {}
-
-            gl.projections.zProjection = {
-                vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(gl,2.0,2.0),
-            }
-
-            gl.projections.xProjection = {
-                vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(gl,0.5,2.0),
-            }           
-
-            gl.projections.yProjection = {
-                vertexPositionBuffer: 
-                    createSquareVertexPositionBuffer(gl,2.0,0.5),
-            }           
-
-            gl.clearColor(0.0, 0.0, 0.0, 1.0)
-            gl.enable(gl.DEPTH_TEST)
+            initShadersGen(gl, 'colormap-shader-fs', 'colormap-shader-vs');
+            gl.shaderProgram.textureCoordAttribute = gl.getAttribLocation(gl.shaderProgram, 'aTextureCoord');
+            gl.enableVertexAttribArray(gl.shaderProgram.textureCoordAttribute);
+            drawColorMap(gl,0);
 
             return gl;
         }
@@ -1009,6 +1006,7 @@
 
                 fetching = true
                 resizeBuffers(frameContext,response.width,response.height)
+                positioningContext = createPositioningContext('#positioning_canvas');
                 $('#frame_slider').attr('max',g_sequenceInfo.max)
 
                 $('#plane_select').html('');
@@ -1623,6 +1621,25 @@
             });
         });
 
+        var drawingMode;
+        var drawingIndex = 0;
+        var drawingSegmentIndex;
+        $('#draw_roi_button').click(function() {
+            drawingMode = true;
+            roiContext = createRoiContext()
+            roiContext.rois = [];
+
+            var color = tinycolor({h:1*360.0/10, s:65, v:50}).toRgb();
+            color.r /= 255;
+            color.g /= 255;
+            color.b /= 255;
+
+            var newRoi = new roi('myRoi',color);
+            roiContext.rois[0] = newRoi;
+            drawingSegmentIndex = 0;
+
+            roiContext.render();
+        });
 
         $(document).keydown(function(e) {
             if ($('input').is(':focus')) return;
@@ -1656,7 +1673,22 @@
 
             if ((e.charCode == 32)||(e.keyCode == 32)) {
                 e.preventDefault();
-                if (!g_frameViewer.isPlaying()) {
+                
+                if (drawingMode == true) {
+                    drawingIndex++;
+                    var color = tinycolor({h:1*360.0/10, s:65, v:50}).toRgb();
+                    color.r /= 255;
+                    color.g /= 255;
+                    color.b /= 255;
+
+                    var newRoi = new roi('myRoi',color);
+                    roiContext.rois[drawingIndex] = newRoi;
+                    drawingSegmentIndex = 0;
+
+                    roiContext.render();
+                }
+                
+                else if (!g_frameViewer.isPlaying()) {
                     $('#start_button').trigger('click');
                 } else {
                     $('#stop_button').trigger('click');
@@ -1666,11 +1698,35 @@
         });
 
     $('#roi_canvas').click(function(e) {
+        drawColorMap(positioningContext, 0);
         var parentOffset = $(this).parent().offset();
         var relX = e.pageX - parentOffset.left;
-        var relY = e.pageY - parentOffset.top;
-        alert(relX + ', ' + relY)
-    })
+        var relY = $(this).height() - (e.pageY - parentOffset.top);
+        
+        var pixelValues = new Uint8Array(4);
+        positioningContext.readPixels(relX, relY, 1, 1, positioningContext.RGBA,
+            positioningContext.UNSIGNED_BYTE, pixelValues);
+        console.log(relX + ', ' + relY)
+        console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
+
+        if ((drawingMode == true) && (pixelValues[2] != 0)) {
+            var transXval = pixelValues[0]*g_sequenceInfo.width/255;
+            var transYval = (255-pixelValues[1])*g_sequenceInfo.height/255;
+            roiContext.rois[drawingIndex].addPoint(g_frameViewer.getCurrentPlane()-1,0,[transXval,transYval]);
+            roiContext.render();
+        }
+    });
+
+    $('#positioning_canvas').click(function(e) {
+        drawColorMap(positioningContext, 0);
+        var parentOffset = $(this).parent().offset();
+        var relX = e.pageX - parentOffset.left;
+        var relY = $(this).height() - (e.pageY - parentOffset.top);
+        
+        var pixelValues = new Uint8Array(4);
+        positioningContext.readPixels(relX, relY, 1, 1, positioningContext.RGBA, positioningContext.UNSIGNED_BYTE, pixelValues);
+        console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
+    });
 
     </script>
 

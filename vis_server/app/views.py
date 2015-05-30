@@ -88,6 +88,7 @@ def index():
     cutoff2 = request.args.get('cutoff2')
 
     return render_template('index.html',dataset=ds,channel=channel,cycle=cycle,cutoff1=cutoff1,cutoff2=cutoff2)
+    #return render_template('webgl_lesson1.html')
 
 @app.route('/getInfo', methods=['GET','POST'])
 def getInfo():
@@ -329,8 +330,7 @@ def getRois():
         for poly in roi.polygons:
             coords = np.array(poly.exterior.coords)
             plane = int(coords[0,-1])
-            #coords = list(coords[:,:2].ravel())
-            coords = coords[:,:2].tolist()
+            coords = coords[:,:2].astype(int).tolist()
             try:
                convertedRois[roi.label][plane].append(coords)
             except KeyError:
