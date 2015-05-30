@@ -51,6 +51,30 @@ function getShader(ctx, id) {
 }
 
 
+function initShadersGen(gl,shader_fs,shader_vs) {
+    var fragmentShader = getShader(gl, shader_fs);
+    var vertexShader = getShader(gl, shader_vs);
+
+    var shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+        alert("Could not initialise shaders");
+    }
+
+    gl.useProgram(shaderProgram);
+
+    shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+    shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+    shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+    gl.shaderProgram = shaderProgram;
+}
+
+
 function updateTextureData(ctx,texture) {
     ctx.bindTexture(ctx.TEXTURE_2D, texture)
     ctx.pixelStorei(ctx.UNPACK_FLIP_Y_WEBGL, true)
@@ -133,4 +157,3 @@ function updateTextureRGBA(texture) {
     gl.bindTexture(gl.TEXTURE_2D, null)
 }
 */
-
