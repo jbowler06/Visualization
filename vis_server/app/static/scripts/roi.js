@@ -13,14 +13,14 @@ function roi(label,color) {
     this.segments = []
     this.points = []
 
-    this.setPoints = function(roiPoints) {
+    this.setPoints = function(gl,roiPoints) {
         this.points = roiPoints;
         this.type = 'polygons';
         for (var plane in roiPoints) {
             this.segments[parseInt(plane)] = [];
             for (var seg = 0; seg  < roiPoints[plane].length; seg++) {
                 var segment = {}
-                segment.polyBuffer = roiContext.createBuffer();
+                segment.polyBuffer = gl.createBuffer();
                 segment.polyBuffer.points = [];
                 
                 var ec = earcut([roiPoints[plane][seg]],true);
@@ -35,7 +35,7 @@ function roi(label,color) {
                     }
                 }
 
-                segment.boundaryBuffer = roiContext.createBuffer();
+                segment.boundaryBuffer = gl.createBuffer();
                 segment.boundaryBuffer.points = [];
                 for (var i=0; i < roiPoints[plane][seg].length; i++) {
                     segment.boundaryBuffer.points.push(roiPoints[plane][seg][i][0]*this.widthScale-this.widthConst)
@@ -44,19 +44,19 @@ function roi(label,color) {
                     segment.boundaryBuffer.points.push(0);
                 }
 
-                roiContext.bindBuffer(roiContext.ARRAY_BUFFER, segment.boundaryBuffer);
-                roiContext.bufferData(roiContext.ARRAY_BUFFER, new Float32Array(segment.boundaryBuffer.points), roiContext.STATIC_DRAW);
+                gl.bindBuffer(gl.ARRAY_BUFFER, segment.boundaryBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(segment.boundaryBuffer.points), gl.STATIC_DRAW);
                 segment.boundaryBuffer.itemSize = 3;
                 segment.boundaryBuffer.numItems = segment.boundaryBuffer.points.length/3;
 
-                roiContext.bindBuffer(roiContext.ARRAY_BUFFER, segment.polyBuffer);
-                roiContext.bufferData(roiContext.ARRAY_BUFFER, new Float32Array(segment.polyBuffer.points), roiContext.STATIC_DRAW);
+                gl.bindBuffer(gl.ARRAY_BUFFER, segment.polyBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(segment.polyBuffer.points), gl.STATIC_DRAW);
                 segment.polyBuffer.itemSize = 3;
                 segment.polyBuffer.numItems = segment.polyBuffer.points.length/3;
 
-                segment.indicesBuffer = roiContext.createBuffer();
-                roiContext.bindBuffer(roiContext.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
-                roiContext.bufferData(roiContext.ELEMENT_ARRAY_BUFFER, new Uint16Array(ec.indices), roiContext.STATIC_DRAW);
+                segment.indicesBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, segment.indicesBuffer);
+                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ec.indices), gl.STATIC_DRAW);
                 segment.indicesBuffer.itemSize = 1;
                 segment.indicesBuffer.numItems = ec.indices.length;
 
@@ -65,8 +65,7 @@ function roi(label,color) {
         }
     }
 
-    this.addPoint = function(plane,segment,point) {
-        
+    this.addPoint = function(gl,plane,segment,point) {
         if (typeof(this.points[plane]) === "undefined") {
             this.points[plane] = [];
         }
@@ -76,7 +75,7 @@ function roi(label,color) {
         }
 
         this.points[plane][segment].push(point);
-        this.setPoints(this.points);
+        this.setPoints(gl,this.points);
     }
 
     this.getSegments = function(plane) {

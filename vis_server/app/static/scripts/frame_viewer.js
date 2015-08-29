@@ -1,4 +1,5 @@
-function FrameViewer() {
+function FrameViewer(gl) {
+    this.glContext = gl;
     this.playing = false;
     this.frameDelay = 166.66;
     this.dragScale = 400;
@@ -10,6 +11,8 @@ function FrameViewer() {
     this.planeSelect = $('#plane_select');
 
     this.offset = { x:0, y:0 };
+    this.roiViewers = [];
+    this.nChannels = 1;
 
     this.mouseState = {
         mouseDown: false
@@ -24,11 +27,33 @@ function FrameViewer() {
     };
 
     this.setCurrentPlane = function(plane) {
+        if (typeof(plane) === "undefined") {
+            plane = this.planeSelect.val();
+        }
+
         plane = Math.min(Math.max(0,plane),this.planeSelect.attr('max'));
         if (plane != this.getCurrentPlane()) {
             this.planeSelect.val(plane);
             this.planeSelect.trigger('change');
+            this.roiViewers.map(function(viewer){viewer.render()});
         }
+    }
+
+    this.setOffset = function(x,y) {
+        this.offset.x = x;
+        this.offset.y = y;
+
+        if (!this.playing) {
+            this.glContext.render();
+        }
+
+        this.roiViewers.map(function(viewer){viewer.render()});
+    }
+
+
+    // TODO: update this!
+    this.numPlanes = function() {
+        return Math.max(1,this.planeSelect.find('option').length-1);
     }
 
     this.setPlaying = function(state) {
@@ -41,6 +66,25 @@ function FrameViewer() {
 
     this.setFrameRate = function(rate) {
         this.frameDelay = 1000/rate;
+    }
+
+    this.createTextureBuffers = function(nChannels) {
+        if (typeof(nChannels) !== 'undefined') {
+            this.nChannels = nChannels;
+        }
+        var glContext = this.glContext;
+
+        if (this.nChannels == 2) {
+            Object.keys(this.glContext.projections).map(function(val,idx,arr) {
+                glContext.projections[val].textureCoordBuffer = 
+                        createTextureCoordBuffer(glContext,2)
+            });
+        } else {
+            Object.keys(this.glContext.projections).map(function(val,idx,arr) {
+                glContext.projections[val].textureCoordBuffer = 
+                        createTextureCoordBuffer(glContext)
+            });
+        }
     }
 
     this.initMouse = function(gl_canvas) {
@@ -63,9 +107,9 @@ function FrameViewer() {
                 }
             }
             if (!play) {
-                frameContext.render();
+                thisViewer.glContext.render();
             }
-            roiContext.render();
+            thisViewer.roiViewers.map(function(viewer){viewer.render()});
         });
 
         gl_canvas.bind('mousedown',function(){
@@ -81,16 +125,26 @@ function FrameViewer() {
             if (mouseState.mouseDown) {
                 var dx = event.clientX - mouseState.lastMouseX;
                 var dy = event.clientY - mouseState.lastMouseY;
-                thisViewer.offset.x += dx/dragScale;
-                thisViewer.offset.y -= dy/dragScale;
-
+                
+                var x = thisViewer.offset.x += dx/dragScale;
+                var y = thisViewer.offset.y -= dy/dragScale;
+                /*
                 if (!play) {
-                    frameContext.render();
+                    thisViewer.glContext.render();
                 }
-                roiContext.render();
+                g_roiViewer.render();
+                */
+                thisViewer.setOffset(x,y);
             }
             mouseState.lastMouseX = event.clientX;
             mouseState.lastMouseY = event.clientY;
         });
-    };
+    }
+
+    this.setFrame = function(aFrame) {
+        var projections = this.glContext.projections;
+        projections.xProjection.texture.image.src = aFrame.x
+        projections.yProjection.texture.image.src = aFrame.y
+        projections.zProjection.texture.image.src = aFrame.z
+    }
 };
