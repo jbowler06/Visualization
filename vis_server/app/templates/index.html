@@ -223,12 +223,17 @@
                             colspan="2">draw roi</td>
                     </tr>
                     <tr>
+                        <td class="tableButton" 
+                            id="roi_select_button" 
+                            colspan="2">select roi</td>
+                    </tr>
+                    <tr>
                         <td class="tableButton clearRoiButton" colspan="2">clear rois</td>
                     </tr>
                 </table>
             </div>
         </div>
-        <div style="height:300px;" class="floatLeft">
+        <div style="height:300px;width:300px" class="floatLeft">
             <div 
                 id="roi_tab_container" 
                 style="width:100%; height:100%; overflow:auto; margin:1px;">
@@ -261,7 +266,7 @@
                 <td>Id: #</td>
             </tr>
             <tr>
-                <td>label:</td>
+                <td>label:</td><td><span id="drawing_label"></span></td>
             </tr>
             <tr>
                 <td>color:</td>
@@ -270,7 +275,7 @@
                 <td>transparency</td>
             </tr>
             <tr>
-                <td><input type="range" 
+                <td colspan="3"><input type="range" 
                        name="roi_edit_slider" 
                        id="roi_edit_slider" 
                        min="0" 
@@ -281,6 +286,14 @@
             <tr>
                 <td>new segment<td>
             </tr>        
+            <tr>
+                <td>
+                    <div id="drawing_complete_button"
+                         class="button halfButton floatLeft slim">
+                         complete
+                     </div>
+                 </td>
+            </tr>
         </table>
     </div>
 
@@ -388,7 +401,8 @@
         void main(void) {
             if (num_channels == 1) {
                 vec4 myTex = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-                if ((myTex.r == 1.0)||(roiOpacity != 0.0)) {
+                //if ((myTex.r == 1.0)||(roiOpacity != 0.0)) {
+                if (roiOpacity != 0.0) {
                     if (uColorMode == 0) {
                         myTex.b = 0.0;
                         myTex.g = 0.0;
@@ -964,7 +978,8 @@
             }
             g_roiViewer.clear();
             g_frameViewer.initMouse($('#roi_editing_canvas'));
-            g_frameBuffer = new FrameBuffer(Date.now(),350,g_sequenceInfo.planes)
+            //TODO: set the default buffer size back to 350
+            g_frameBuffer = new FrameBuffer(Date.now(),1,g_sequenceInfo.planes)
             g_frameBuffer.set_planes(g_sequenceInfo.planes);
             g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
             if (!g_normingVal) {
@@ -1084,12 +1099,12 @@
             fileSelection('')
         })
 
-        $('#load_button').click(function(){
-            $('#load_button').addClass('selected')
-            $('#load_box').removeClass('hidden')
-            $('#ch1_norm_input').val(g_normingVal[0])
-            $('#ch2_norm_input').val(g_normingVal[1])
-        })
+        $('#load_button').click(function() {
+            $('#load_button').addClass('selected');
+            $('#load_box').removeClass('hidden');
+            $('#ch1_norm_input').val(g_normingVal[0]);
+            $('#ch2_norm_input').val(g_normingVal[1]);
+        });
 
         $('#options_button').click(function(){
             $('#options_button').addClass('selected')
@@ -1235,6 +1250,7 @@
                         g_roiViewer.gl.rois = [];
                         var roiLabels = Object.keys(response);
                         g_roiViewer.storePolygonRoi(response, roiLabels, 0);
+
                     } else {
                         alert("mask type rois not currently implemented");
                         return;
@@ -1457,11 +1473,9 @@
             }
         });
 
-
-        $('#set_roi_label_button').click(function() {
+        function addRoiLabel(newLabel) {
             var labelSelect = $('#label_select');
             labelSelect.prop('disabled', true);
-            var newLabel = $('#roi_label_input').val();
             $.ajax({
                 url: '{{ url_for('.setRoiLabel', _external=True) }}',
                 type: 'POST',
@@ -1479,6 +1493,12 @@
             }).always(function() {
                 labelSelect.prop('disabled', false);
             });
+        }
+
+
+        $('#set_roi_label_button').click(function() {
+            addRoiLabel($('#roi_label_input').val());
+            $('#roi_label_input').val('')
         });
 
 
@@ -1497,7 +1517,7 @@
                 cache: false,
                 data: {
                     path: g_filePath,
-                    label: $('#label_select').val()
+                    label: selected_value
                 }
             }).done(function() {
 
@@ -1506,11 +1526,24 @@
             });
         });
 
-        var drawingMode;
         var drawingIndex = 0;
         var drawingSegmentIndex;
         $('#draw_roi_button').click(function() {
-            drawingMode = true;
+            if ($('#label_select').val() === "") {
+                var newLabel = Date.now();
+                addRoiLabel(newLabel);
+            }
+
+            if (g_frameViewer.getCurrentPlane() == 0) {
+                g_frameViewer.setCurrentPlane(1);
+            }
+
+            if ($(this).hasClass('selected')) {
+                $(this).removeClass('selected');
+                return;
+            } else {
+                $(this).addClass('selected');
+            }
 
             var color = tinycolor({h:1*360.0/10, s:65, v:50}).toRgb();
             color.r /= 255;
@@ -1522,6 +1555,37 @@
             drawingSegmentIndex = 0;
 
             g_roiEditor.render();
+        });
+
+        $('#drawing_complete_button').click(function() {
+            if (g_roiEditor.rois.length) {
+                var roi = g_roiEditor.rois.pop();
+                $.ajax({
+                    url: '{{ url_for('.addRoi', _external=True) }}',
+                    type: 'POST',
+                    cache: false,
+                    data: {
+                        path: g_filePath,
+                        label: $('#label_select').val(),
+                        points: JSON.stringify(roi.points)
+                    }
+                }).done(function() {
+
+                }).always(function() {
+
+                });
+    
+                g_roiViewer.rois.push(roi);
+                g_roiEditor.render();
+            }
+        });
+
+        $('#roi_select_button').click(function() {
+            if (!$(this).hasClass('selected')) {
+                $(this).addClass('selected');
+            } else {
+                $(this).removeClass('selected');
+            }
         });
 
         $(document).keydown(function(e) {
@@ -1539,7 +1603,7 @@
                     setRoiMask(rois[Math.min(rois.length-1,currentIndex+1)]);
                 }
                 return;
-            } else if (drawingMode == true) {
+            } else if ($('#draw_roi_button').hasClass('selected')) {
                 if (e.keyCode == 78) {
                     drawingIndex++;
                     var color = tinycolor({h:1*360.0/10, s:65, v:50}).toRgb();
@@ -1579,7 +1643,7 @@
             if ((e.charCode == 32)||(e.keyCode == 32)) {
                 e.preventDefault();
                 
-                if (drawingMode == true) {
+                if ($('#draw_roi_button').hasClass('selected')) {
                     drawingIndex++;
                     var color = tinycolor({h:1*360.0/10, s:65, v:50}).toRgb();
                     color.r /= 255;
@@ -1614,15 +1678,35 @@
         console.log(relX + ', ' + relY)
         console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
 
-        if ((drawingMode == true) && (pixelValues[2] != 0)) {
-            if (g_frameViewer.getCurrentPlane() == 0) {
-                alert('rois need to be assigned to specific planes, not the time average');
-            }
+        if (pixelValues[2] != 0) {
             var transXval = pixelValues[0]*g_sequenceInfo.width/255;
             var transYval = (255-pixelValues[1])*g_sequenceInfo.height/255;
-            g_roiEditor.rois[drawingIndex].addPoint(
-                    g_roiEditor.gl,g_frameViewer.getCurrentPlane()-1,drawingSegmentIndex,[transXval,transYval]);
-            g_roiEditor.render();
+            if ($('#draw_roi_button').hasClass('selected')) {
+                if (g_frameViewer.getCurrentPlane() == 0) {
+                    alert('rois need to be assigned to specific planes, not the time average');
+                }
+                g_roiEditor.rois[drawingIndex].addPoint(
+                        g_roiEditor.gl,g_frameViewer.getCurrentPlane()-1,drawingSegmentIndex,[transXval,transYval]);
+                g_roiEditor.render();
+            } else if ($('#roi_select_button').hasClass('selected')) {
+                $.ajax({
+                    url: '{{ url_for('.selectRoi', _external=True) }}',
+                    type: 'POST',
+                    cache: false,
+                    data: {
+                        path: g_filePath,
+                        label: $('#label_select').val(),
+                        x: transXval,
+                        y: transYval,
+                        z: 0
+                    }})
+                    .done(function(response) {
+                        $('#drawing_label').text(response.label);
+                    })
+                    .always(function() {
+                    });
+
+            }
         }
     });
 

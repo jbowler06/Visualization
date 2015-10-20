@@ -85,8 +85,13 @@ body {
     background-color: #555;
     cursor: pointer;
 }
-.button.selected {
+.selected {
+
+}
+.selected {
     background-color: #555;
+}
+.button.selected {
     cursor: default;
 }
 .button.smallButton {
@@ -178,6 +183,7 @@ input.norming_value_input{
     color: #000;
 }
 #volume_button.loaded.selected {
+    background-color: #0F0;
     color: #555;
 }
 #volume_button.loaded:hover {
