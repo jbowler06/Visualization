@@ -335,7 +335,7 @@ def getRois():
             for i in xrange(roi.im_shape[0]):
                 convertedRois[roi.id].append([])
         except:
-            for i in xrange(np.max(np.array(roi.coords)[:,:,2]):
+            for i in xrange(np.max(np.array(roi.coords)[:,:,2])):
                 convertedRois[roi.id].append([])
         for poly in roi.polygons:
             coords = np.array(poly.exterior.coords)
