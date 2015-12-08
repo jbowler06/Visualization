@@ -208,6 +208,7 @@ input.norming_value_input{
 .roiTab {
     border: thin solid #0F0;
     height: 50px;
+    overflow: hidden;
 }
 
 .roiTabLabel {
@@ -229,6 +230,10 @@ input.norming_value_input{
 .roiTab .button.loaded.viewing {
     color: #000;
     background-color: #0F0;
+}
+
+.roiTab.selected {
+    background-color: #500;
 }
 
 #roi_control_heading .button {
@@ -310,4 +315,13 @@ input.norming_value_input{
 
 #label_select {
     width: 125px;
+}
+
+#drawing_controls {
+    width: 250px;
+    height:250px;
+    right:0px;
+    bottom:0px;
+    position:absolute;
+    border: 1px solid #fff;
 }

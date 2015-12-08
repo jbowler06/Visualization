@@ -212,11 +212,11 @@
                             id="polygon_roi_load_button" 
                             colspan="2">load all polygons</td>
                     </tr>
-                    <tr>
+                    <!-- tr>
                         <td class="tableButton roiLoadButton" 
                             id="projection_roi_load_button" 
                             colspan="2">load all projections</td>
-                    </tr>
+                    </tr-->
                     <tr>
                         <td class="tableButton" 
                             id="draw_roi_button" 
@@ -256,14 +256,13 @@
     </div>
 
 
-    <div id="drawing_controls"
-        style="width:200px;height:200px;right:0px;bottom:0px;position:absolute;border: 1px solid #fff">
+    <div id="drawing_controls" class="hidden">
         <table>
             <tr>
                 <td>Set Name</td>
             </tr>
             <tr>
-                <td>Id: #</td>
+                <td>Id:</td><td><span id="drawing_id"></span></td>
             </tr>
             <tr>
                 <td>label:</td><td><span id="drawing_label"></span></td>
@@ -287,12 +286,26 @@
                 <td>new segment<td>
             </tr>        
             <tr>
+                <table><tr>
                 <td>
                     <div id="drawing_complete_button"
                          class="button halfButton floatLeft slim">
                          complete
                      </div>
                  </td>
+                 <td>
+                    <div id="roi_delete_button"
+                         class="button halfButton floatLeft slim">
+                         delete
+                    </div>
+                 </td>
+                 <td>
+                    <div id="roi_move_segment_button"
+                         class="button halfButton floatLeft slim">
+                         move
+                    </div>
+                 </td>
+                 </tr></table>
             </tr>
         </table>
     </div>
@@ -755,7 +768,7 @@
                     fetching = true
                     fetchFrames()
                 }
-            } 
+            }
         }
 
         var fetching = true
@@ -890,9 +903,14 @@
                 },
                 cache: false
             }).done(function(html) {
-                $('#label_select').html('')
-                $('#label_select').html(html)
-                $('#label_select').prop('disabled', false);
+                var labelSelect = $('#label_select');
+                labelSelect.html('')
+                labelSelect.html(html)
+                var options = labelSelect.find('option');
+                if (options.length > 1) {
+                    labelSelect.val(options[1].value)
+                }
+                labelSelect.prop('disabled', false);
             });
         }
 
@@ -978,8 +996,7 @@
             }
             g_roiViewer.clear();
             g_frameViewer.initMouse($('#roi_editing_canvas'));
-            //TODO: set the default buffer size back to 350
-            g_frameBuffer = new FrameBuffer(Date.now(),1,g_sequenceInfo.planes)
+            g_frameBuffer = new FrameBuffer(Date.now(),1000,g_sequenceInfo.planes)
             g_frameBuffer.set_planes(g_sequenceInfo.planes);
             g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
             if (!g_normingVal) {
@@ -1150,6 +1167,7 @@
             $('#roi_box').addClass('hidden');
         });
 
+
         function setRoiMask(roiLabel) {
             alert("set roi mask is disabled");
             thisRoi = roiContext.rois[roiLabel];
@@ -1159,16 +1177,6 @@
             roiContext.projections.zProjection.texture.image.src = thisRoi.z;
         }
 
-        function createRoiTab(number,id) {
-            var thisId = 'roi_tab_'+number.toString()
-            $('#roi_tab_template').clone(true)
-                                  .attr('id',thisId)
-                                  .removeClass('hidden')
-                                  .addClass('activeRoiTab')
-                                  .appendTo('#roi_tab_container');
-            $('#' + thisId + ' .roiNumberSpan').text(number);
-            $('#' + thisId + ' .roiIdSpan').text(id);
-        }
 
         $('.roiPolygonsButton').click(function() {
             var thisParent = $(this).parent().attr('id');
@@ -1195,17 +1203,21 @@
             g_roiViewer.render();
         });
 
+
+        //TODO: this function uses old roiTab logic
         function setRoiLoaded(number) {
             var thisId = 'roi_tab_'+number.toString()
             $('#'+thisId+' .roiPolygonsButton').addClass('loaded');
         }
 
+        //TODO: this function uses old roiTab logic
         function setRoiViewing(number) {
             var thisId = 'roi_tab_'+number.toString()
             $('#'+thisId+' .roiPolygonsButton').addClass('viewing');
         }
 
 
+        //TODO: reimplement mask style ROIs
         $('.roiLoadButton').click(function() {
             var loadButton = $(this);
             if (loadButton.hasClass('selected')) {
@@ -1250,7 +1262,6 @@
                         g_roiViewer.gl.rois = [];
                         var roiLabels = Object.keys(response);
                         g_roiViewer.storePolygonRoi(response, roiLabels, 0);
-
                     } else {
                         alert("mask type rois not currently implemented");
                         return;
@@ -1459,8 +1470,10 @@
             var control = $('#roi_controls')
             if (control.hasClass('minified')) {
                 control.removeClass('minified');
+                $('#drawing_controls').removeClass('hidden');
             } else {
                 control.addClass('minified');
+                $('#drawing_controls').addClass('hidden');
             }
         });
 
@@ -1526,92 +1539,225 @@
             });
         });
 
+
         var drawingIndex = 0;
         var drawingSegmentIndex;
         $('#draw_roi_button').click(function() {
+            if ($(this).hasClass('selected')) {
+                $(this).removeClass('selected');
+                g_frameViewer.allowDrag = true;
+                g_roiEditor.mouseClickHandler = undefined;
+                g_roiEditor.mouseDragHandler = undefined;
+                return;
+            }
+
+            storeRois();
+
             if ($('#label_select').val() === "") {
                 var newLabel = Date.now();
                 addRoiLabel(newLabel);
+                g_frameViewer.allowDrag = false;
             }
 
-            if (g_frameViewer.getCurrentPlane() == 0) {
-                g_frameViewer.setCurrentPlane(1);
-            }
+            $(this).addClass('selected');
+            g_frameViewer.allowDrag = false;
 
-            if ($(this).hasClass('selected')) {
-                $(this).removeClass('selected');
-                return;
-            } else {
-                $(this).addClass('selected');
-            }
-
-            var color = tinycolor({h:1*360.0/10, s:65, v:50}).toRgb();
+            var color = tinycolor({h:Math.random()*360.0, s:65, v:50}).toRgb();
             color.r /= 255;
             color.g /= 255;
             color.b /= 255;
 
-            var newRoi = new roi('myRoi',color);
+            var newRoi = new roi(Date.now(),color);
             g_roiEditor.rois[0] = newRoi;
+            $('#drawing_id').text(newRoi.id);
             drawingSegmentIndex = 0;
 
             g_roiEditor.render();
+            g_roiEditor.mouseClickHandler = drawRoiMouseClickHandler;
+            g_roiEditor.mouseDragHandler = drawRoiMouseClickHandler;
         });
 
-        $('#drawing_complete_button').click(function() {
-            if (g_roiEditor.rois.length) {
-                var roi = g_roiEditor.rois.pop();
-                $.ajax({
-                    url: '{{ url_for('.addRoi', _external=True) }}',
-                    type: 'POST',
-                    cache: false,
-                    data: {
-                        path: g_filePath,
-                        label: $('#label_select').val(),
-                        points: JSON.stringify(roi.points)
-                    }
-                }).done(function() {
 
-                }).always(function() {
+        function drawRoiMouseClickHandler(x, y) {
+            if (g_frameViewer.getCurrentPlane() == 0) {
+                for (plane_idx = 0; plane_idx < g_frameViewer.numPlanes(); plane_idx++) {
+                    g_roiEditor.rois[0].addPoint(
+                        g_roiEditor.gl,plane_idx,0,[x,y]);
+                }
+            } else {
+                g_roiEditor.rois[0].addPoint(
+                    g_roiEditor.gl,g_frameViewer.getCurrentPlane()-1,0,[x,y]);
+            }
+            g_roiEditor.render();
+        }
 
+
+        function translateSegmentMouseDragHandler(x,y,prev_x,prev_y) {
+            if (!g_roiEditor.rois.length) {
+                return;
+            }
+            
+            var roi = g_roiEditor.rois[0];
+            if (typeof(roi) !== "undefined") {
+                var points = roi.points;
+                var plane = g_frameViewer.getCurrentPlane()-1;
+                var planes = []
+                if (plane != -1) {
+                    planes = [plane]
+                } else {
+                    planes = Array(g_frameViewer.numPlanes()).fill().map((x,i)=>i)
+                }
+
+                planes.map(function(plane) {
+                    var dx = x-prev_x;
+                    var dy = y-prev_y
+                    points[plane].map(function(e,a,i) {
+                        e.map(function(e2,a2,i2){
+                            e2[0] += dx;
+                            e2[1] += dy;
+                        });
+                    });
+                    roi.setPoints(g_roiEditor.gl,points);
+                    g_roiEditor.render();
                 });
-    
-                g_roiViewer.rois.push(roi);
-                g_roiEditor.render();
+            }
+        }
+
+
+        function updateRoi(roi) {
+            $.ajax({
+                url: '{{ url_for('.updateRoi', _external=True) }}',
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    label: $('#label_select').val(),
+                    points: JSON.stringify(roi.points),
+                    roiLabel: roi.label,
+                    roiId: roi.id
+                }
+            }).done(function() {
+            }).fail(function() {
+                alert('there was an error updating the ROI set');
+            }).always(function() {
+            });
+        }
+
+
+        function editRoi(roi) {
+            var prev_roi = g_roiEditor.rois[0];
+            if (typeof(prev_roi) !== "undefined") {
+                g_roiViewer.addRoi(g_roiEditor.popRoi(prev_roi.id));
+                prev_roi.infoTab.removeClass('selected');
+                updateRoi(prev_roi);
+                $('#drawing_id').text('');
+            }
+            if (typeof(roi) !== "undefined") {
+                g_roiEditor.addRoi(roi);
+                roi.infoTab.addClass('selected');
+                $('#drawing_id').text(roi.id);
+            }
+        }
+
+
+        function deleteRoi(roi_id) {
+            $.ajax({
+                url: '{{ url_for('.deleteRoi', _external=True) }}',
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    label: $('#label_select').val(),
+                    roiId: roi_id
+                }
+            }).done(function() {
+            }).always(function() {
+            })
+        }
+
+        function storeRois() {
+            if (g_roiEditor.rois.length) {
+                if ($('#draw_roi_button').hasClass('selected')) {
+                    $('#draw_roi_button').trigger('click');
+                }
+            }
+            editRoi(undefined);
+        }
+
+        $('#drawing_complete_button').click(storeRois);
+
+        $('#roi_delete_button').click(function() {
+            $('#drawing_id').text('');
+            var roi = g_roiEditor.rois.pop();
+            roi.infoTab.detach();
+            g_roiEditor.render();
+            deleteRoi(roi.id);
+
+            if ($('#draw_roi_button').hasClass('selected')) {
+                $('#draw_roi_button').trigger('click');
             }
         });
+
+        $('#roi_move_segment_button').click(function() {
+            if ($(this).hasClass('selected')) {
+                g_frameViewer.allowDrag = true;
+                $(this).removeClass('selected');
+                g_roiEditor.mouseDragHandler = undefined;
+            } else {
+                g_frameViewer.allowDrag = false;
+                $(this).addClass('selected');
+                g_roiEditor.mouseDragHandler = translateSegmentMouseDragHandler;
+            }
+        });
+
+
+        function selectSegmentMouseClickHandler(x, y) {
+            $('#roi_select_button').trigger('click');
+            $.ajax({
+                url: '{{ url_for('.selectRoi', _external=True) }}',
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    label: $('#label_select').val(),
+                    x: x,
+                    y: y,
+                    z: (g_frameViewer.getCurrentPlane()-1)
+                }})
+                .done(function(response) {
+                    $('#drawing_label').text(response.label);
+                    $('#drawing_id').text(response.id);
+
+                    var roi = g_roiViewer.popRoi(response.id);
+                    editRoi(roi);
+                })
+                .always(function() {
+                });
+
+        }
 
         $('#roi_select_button').click(function() {
             if (!$(this).hasClass('selected')) {
                 $(this).addClass('selected');
+                g_frameViewer.allowDrag = false;
+                g_roiEditor.mouseClickHandler = selectSegmentMouseClickHandler;
             } else {
                 $(this).removeClass('selected');
+                g_frameViewer.allowDrag = true;
+                g_roiEditor.mouseClickHandler = undefined;
             }
         });
 
-        $(document).keydown(function(e) {
-            if ($('input').is(':focus')) return;
 
-            if ($('#roi_mode_button').hasClass('selected')) {
-                alert('roi mode currently not implemented');
-                var rois = Object.keys(roiContext.rois);
-                var currentIndex = Math.max(0,rois.indexOf(roiContext.current));
-                if ([37,38].indexOf(e.keyCode) != -1) {
-                    e.preventDefault();
-                    setRoiMask(rois[Math.max(0,currentIndex-1)]);
-                } else if ([39,40].indexOf(e.keyCode) != -1) {
-                    e.preventDefault();
-                    setRoiMask(rois[Math.min(rois.length-1,currentIndex+1)]);
-                }
-                return;
-            } else if ($('#draw_roi_button').hasClass('selected')) {
+        KeyboardHandlers = {
+            'roiDrawingMode': function(e) {
                 if (e.keyCode == 78) {
-                    drawingIndex++;
                     var color = tinycolor({h:1*360.0/10, s:65, v:50}).toRgb();
                     color.r /= 255;
                     color.g /= 255;
                     color.b /= 255;
 
-                    var newRoi = new roi('myRoi',color);
+                    var newRoi = new roi(Date.now(),color);
                     g_roiEditor.rois[drawingIndex] = newRoi;
                     drawingSegmentIndex = 0;
 
@@ -1623,103 +1769,123 @@
                     drawingIndex = Math.max(-1,drawingIndex-1);
                     g_roiEditor.render();
                 }
-            }
-            console.log(e.keyCode)
+            },
 
-            if ((e.keyCode == 38)) {
-                e.preventDefault();
-                g_frameViewer.setCurrentPlane(g_frameViewer.getCurrentPlane()-1);
-            } else if(e.keyCode == 40) {
-                e.preventDefault();
-                g_frameViewer.setCurrentPlane(g_frameViewer.getCurrentPlane()+1);
-            } else if (e.keyCode == 37) {
-                e.preventDefault();
-                $('#single_reverse_button').trigger('click');
-            } else if (e.keyCode == 39) {
-                e.preventDefault();
-                $('#single_step_button').trigger('click');
-            }
-
-            if ((e.charCode == 32)||(e.keyCode == 32)) {
-                e.preventDefault();
-                
-                if ($('#draw_roi_button').hasClass('selected')) {
-                    drawingIndex++;
-                    var color = tinycolor({h:1*360.0/10, s:65, v:50}).toRgb();
-                    color.r /= 255;
-                    color.g /= 255;
-                    color.b /= 255;
-
-                    var newRoi = new roi('myRoi',color);
-                    g_roiEditor.rois[drawingIndex] = newRoi;
-                    drawingSegmentIndex = 0;
-
-                    roiContext.render();
+            'roiMaskMode': function(e) {
+                var rois = Object.keys(roiContext.rois);
+                var currentIndex = Math.max(0,rois.indexOf(roiContext.current));
+                if ([37,38].indexOf(e.keyCode) != -1) {
+                    e.preventDefault();
+                    setRoiMask(rois[Math.max(0,currentIndex-1)]);
+                } else if ([39,40].indexOf(e.keyCode) != -1) {
+                    e.preventDefault();
+                    setRoiMask(rois[Math.min(rois.length-1,currentIndex+1)]);
                 }
-                
-                else if (!g_frameViewer.isPlaying()) {
-                    $('#start_button').trigger('click');
-                } else {
-                    $('#stop_button').trigger('click');
+            },
+
+            'frameViewer': function(e) {
+                e.preventDefault();
+                if ((e.keyCode == 38)) {
+                    g_frameViewer.setCurrentPlane(g_frameViewer.getCurrentPlane()-1);
+                } else if(e.keyCode == 40) {
+                    g_frameViewer.setCurrentPlane(g_frameViewer.getCurrentPlane()+1);
+                } else if (e.keyCode == 37) {
+                    $('#single_reverse_button').trigger('click');
+                } else if (e.keyCode == 39) {
+                    $('#single_step_button').trigger('click');
                 }
+
+                if ((e.charCode == 32)||(e.keyCode == 32)) {
+                    if (!g_frameViewer.isPlaying()) {
+                        $('#start_button').trigger('click');
+                    } else {
+                        $('#stop_button').trigger('click');
+                    }
+                }
+            }
+        }
+
+        $(document).keydown(function(e) {
+            if ($('input').is(':focus')) return;
+
+            if ($('#roi_mode_button').hasClass('selected')) {
+                alert('roi mode currently not implemented');
+                KeyboardHandlers.roiMaskMode(e);
+                return;
+            } else if ($('#draw_roi_button').hasClass('selected')) {
+                KeyboardHandlers.roiDrawingMode(e);
+            }
+
+            KeyboardHandlers.frameViewer(e)
+        });
+
+        $('#roi_editing_canvas').click(function(e) {
+            drawColorMap(positioningContext, 0);
+            var parentOffset = $(this).parent().offset();
+            var relX = e.pageX - parentOffset.left;
+            var relY = $(this).height() - (e.pageY - parentOffset.top);
+            
+            var pixelValues = new Uint8Array(4);
+            positioningContext.readPixels(relX, relY, 1, 1, positioningContext.RGBA,
+                positioningContext.UNSIGNED_BYTE, pixelValues);
+            //console.log(relX + ', ' + relY)
+            //console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
+
+            if (pixelValues[2] != 0) {
+                var transXval = pixelValues[0]*g_sequenceInfo.width/255;
+                var transYval = (255-pixelValues[1])*g_sequenceInfo.height/255;
+            }
+
+            if (typeof(g_roiEditor.mouseClickHandler) !== 'undefined') {
+                g_roiEditor.mouseClickHandler(transXval, transYval);
             }
 
         });
 
-    $('#roi_editing_canvas').click(function(e) {
-        drawColorMap(positioningContext, 0);
-        var parentOffset = $(this).parent().offset();
-        var relX = e.pageX - parentOffset.left;
-        var relY = $(this).height() - (e.pageY - parentOffset.top);
-        
-        var pixelValues = new Uint8Array(4);
-        positioningContext.readPixels(relX, relY, 1, 1, positioningContext.RGBA,
-            positioningContext.UNSIGNED_BYTE, pixelValues);
-        console.log(relX + ', ' + relY)
-        console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
+        $('#roi_editing_canvas').bind('mousedown', function() {
+            this.mouseDown = true;
+        });
 
-        if (pixelValues[2] != 0) {
-            var transXval = pixelValues[0]*g_sequenceInfo.width/255;
-            var transYval = (255-pixelValues[1])*g_sequenceInfo.height/255;
-            if ($('#draw_roi_button').hasClass('selected')) {
-                if (g_frameViewer.getCurrentPlane() == 0) {
-                    alert('rois need to be assigned to specific planes, not the time average');
+        $('#roi_editing_canvas').bind('mouseup', function() {
+            this.mouseDown = false;
+            this.prevPoint = undefined;
+        });
+
+        $('#roi_editing_canvas').mousemove(function(e){
+            if (this.mouseDown) {
+                drawColorMap(positioningContext, 0);
+                var parentOffset = $(this).parent().offset();
+                var relX = e.pageX - parentOffset.left;
+                var relY = $(this).height() - (e.pageY - parentOffset.top);
+                
+                var pixelValues = new Uint8Array(4);
+                positioningContext.readPixels(relX, relY, 1, 1, positioningContext.RGBA,
+                    positioningContext.UNSIGNED_BYTE, pixelValues);
+
+                if (pixelValues[2] != 0) {
+                    var transXval = pixelValues[0]*g_sequenceInfo.width/255;
+                    var transYval = (255-pixelValues[1])*g_sequenceInfo.height/255;
+                    
+                    if ((typeof(g_roiEditor.mouseDragHandler) !== 'undefined') &&
+                            (typeof(this.prevPoint) !== 'undefined')) {
+                        g_roiEditor.mouseDragHandler(transXval,transYval,
+                            this.prevPoint[0],this.prevPoint[1]);
+                    }
+                    this.prevPoint = [transXval,transYval];
                 }
-                g_roiEditor.rois[drawingIndex].addPoint(
-                        g_roiEditor.gl,g_frameViewer.getCurrentPlane()-1,drawingSegmentIndex,[transXval,transYval]);
-                g_roiEditor.render();
-            } else if ($('#roi_select_button').hasClass('selected')) {
-                $.ajax({
-                    url: '{{ url_for('.selectRoi', _external=True) }}',
-                    type: 'POST',
-                    cache: false,
-                    data: {
-                        path: g_filePath,
-                        label: $('#label_select').val(),
-                        x: transXval,
-                        y: transYval,
-                        z: 0
-                    }})
-                    .done(function(response) {
-                        $('#drawing_label').text(response.label);
-                    })
-                    .always(function() {
-                    });
-
             }
-        }
-    });
+        });
 
-    $('#positioning_canvas').click(function(e) {
-        drawColorMap(positioningContext, 0);
-        var parentOffset = $(this).parent().offset();
-        var relX = e.pageX - parentOffset.left;
-        var relY = $(this).height() - (e.pageY - parentOffset.top);
-        
-        var pixelValues = new Uint8Array(4);
-        positioningContext.readPixels(relX, relY, 1, 1, positioningContext.RGBA, positioningContext.UNSIGNED_BYTE, pixelValues);
-        console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
-    });
+        $('#positioning_canvas').click(function(e) {
+            drawColorMap(positioningContext, 0);
+            var parentOffset = $(this).parent().offset();
+            var relX = e.pageX - parentOffset.left;
+            var relY = $(this).height() - (e.pageY - parentOffset.top);
+            
+            var pixelValues = new Uint8Array(4);
+            positioningContext.readPixels(relX, relY, 1, 1, positioningContext.RGBA, positioningContext.UNSIGNED_BYTE, pixelValues);
+            console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
+        });
 
     </script>
 

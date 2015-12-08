@@ -3,6 +3,7 @@ function FrameViewer(gl) {
     this.playing = false;
     this.frameDelay = 166.66;
     this.dragScale = 400;
+    this.allowDrag = true;
     this.current = 0;
 
     this.zoomLevel = -3.5;
@@ -121,19 +122,14 @@ function FrameViewer(gl) {
         });
 
         var dragScale = this.dragScale;
+        var frameViewer = this;
         gl_canvas.mousemove(function(event) {
-            if (mouseState.mouseDown) {
+            if (mouseState.mouseDown && frameViewer.allowDrag) {
                 var dx = event.clientX - mouseState.lastMouseX;
                 var dy = event.clientY - mouseState.lastMouseY;
                 
                 var x = thisViewer.offset.x += dx/dragScale;
                 var y = thisViewer.offset.y -= dy/dragScale;
-                /*
-                if (!play) {
-                    thisViewer.glContext.render();
-                }
-                g_roiViewer.render();
-                */
                 thisViewer.setOffset(x,y);
             }
             mouseState.lastMouseX = event.clientX;
@@ -143,8 +139,8 @@ function FrameViewer(gl) {
 
     this.setFrame = function(aFrame) {
         var projections = this.glContext.projections;
-        projections.xProjection.texture.image.src = aFrame.x
-        projections.yProjection.texture.image.src = aFrame.y
-        projections.zProjection.texture.image.src = aFrame.z
+        projections.xProjection.texture.image.src = aFrame.x;
+        projections.yProjection.texture.image.src = aFrame.y;
+        projections.zProjection.texture.image.src = aFrame.z;
     }
 };

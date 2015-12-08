@@ -1,5 +1,6 @@
-function roi(label,color) {
-    this.label = label;
+function roi(id,color) {
+    this.id = id;
+    this.label = "";
     this.color = color;
     this.mask = {};
     this.display = true;
@@ -12,6 +13,21 @@ function roi(label,color) {
     
     this.segments = []
     this.points = []
+
+
+    this.createRoiTab = function() {
+        var thisId = 'roi_tab_0';
+        var infoTab = $('#roi_tab_template').clone(true)
+                              .attr('id',thisId)
+                              .removeClass('hidden')
+                              .addClass('activeRoiTab')
+                              .appendTo('#roi_tab_container');
+        infoTab.find('.roiNumberSpan').text('0');
+        infoTab.find('.roiIdSpan').text(id);
+        return infoTab;
+    }
+
+    this.infoTab = this.createRoiTab();
 
     this.setPoints = function(gl,roiPoints) {
         this.points = roiPoints;

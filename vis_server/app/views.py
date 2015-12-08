@@ -327,17 +327,21 @@ def getRois():
     rois = ROIList.load(os.path.join(dataset.savedir,'rois.pkl'),label=label)
 
     for i,roi in enumerate(rois):
-        if roi.label is None:
-            roi.label = i
-        convertedRois[roi.label] = {}
+        if roi.id is None:
+            roi.id = i
+
+        convertedRois[roi.id] = []
+        try:
+            for i in xrange(roi.im_shape[0]):
+                convertedRois[roi.id].append([])
+        except:
+            for i in xrange(np.max(np.array(roi.coords)[:,:,2]):
+                convertedRois[roi.id].append([])
         for poly in roi.polygons:
             coords = np.array(poly.exterior.coords)
             plane = int(coords[0,-1])
             coords = coords[:,:2].astype(int).tolist()
-            try:
-               convertedRois[roi.label][plane].append(coords)
-            except KeyError:
-                convertedRois[roi.label][plane] = [coords]
+            convertedRois[roi.id][plane].append(coords)
 
     return jsonify(**convertedRois)
 
@@ -392,6 +396,7 @@ def getFrames():
                         norming_val[ch] = factor
         else:
             vol = seq._get_frame(frame_number)
+            #vol = np.nanmean(seq[frame_number:frame_number+10,:,:,:,:],axis=0)
 
         if channel is not None:
             vol = vol[:,:,:,channel]
@@ -478,22 +483,26 @@ def selectRoi():
     for roi in rois:
         for poly in roi.polygons:
             z_coord = np.array(poly.exterior.coords)[0,2]
-            if z_coord == plane and poly.contains(point):
-                return jsonify(label=roi.label,id=roi.id)
+            if z_coord == plane or plane == -1:
+                if poly.contains(point):
+                    return jsonify(label=roi.label,id=roi.id)
 
     return jsonify(result='none found')
 
-@app.route('/addRoi',methods=['GET','POST'])
-def addRoi():
+
+@app.route('/updateRoi',methods=['GET','POST'])
+def updateRoi():
     ds_path = request.form.get('path')
     label = request.form.get('label')
     points = json.loads(request.form.get('points'))
+    roi_label = request.form.get('roiLabel')
+    roi_id = request.form.get('roiId')
 
     dataset = ImagingDataset.load(ds_path)
     roi_data = []
     for i,plane in enumerate(points):
         array_dat = np.array(plane)
-        z_dims = i*np.ones((1,array_dat.shape[1],1))
+        z_dims = i*np.ones((array_dat.shape[:2]+(1,)))
         plane_data = np.concatenate((array_dat,z_dims),axis=2)
         roi_data.extend(list(plane_data))
     try:
@@ -501,12 +510,32 @@ def addRoi():
     except:
         return jsonify(result='failed to create ROI')
 
+    roi.label = roi_label
+    roi.id = roi_id
     try:
         rois = dataset.ROIs[label]
     except KeyError:
         rois = []
 
     rois.append(roi)
+    dataset.add_ROIs(ROIList(rois), label=label)
+
+    return jsonify(result='success')
+
+
+@app.route('/deleteRoi',methods=['GET','POST'])
+def deleteRoi():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')
+    roi_id = request.form.get('roiId')
+
+    dataset = ImagingDataset.load(ds_path)
+    try:
+        rois = dataset.ROIs[label]
+    except KeyError:
+        return jsonify(result='failed to located ROI List')
+
+    rois = filter(lambda r: r.id != roi_id, rois)
     dataset.add_ROIs(ROIList(rois), label=label)
 
     return jsonify(result='success')
