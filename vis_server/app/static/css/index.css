@@ -319,9 +319,12 @@ input.norming_value_input{
 
 #drawing_controls {
     width: 250px;
-    height:250px;
-    right:0px;
-    bottom:0px;
-    position:absolute;
+    height: 175px;
+    right: 0px;
+    bottom: 0px;
+    position: absolute;
     border: 1px solid #fff;
+    z-index: 10;
+    background-color: #000;
+
 }
