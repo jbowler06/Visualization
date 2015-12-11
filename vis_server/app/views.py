@@ -34,6 +34,7 @@ from sima import ImagingDataset
 from sima import Sequence
 from sima.ROI import ROIList
 from sima.ROI import ROI
+from sima.segment import SmoothROIBoundaries
 
 from PIL import Image
 import StringIO
@@ -128,7 +129,7 @@ def getInfo():
         'planes': range(seq.shape[1]+1),
         'height': seq.shape[2],
         'width': seq.shape[3],
-        'max': length
+        'length': length
     }
 
     for channel in norm_factors.keys():
@@ -505,10 +506,8 @@ def updateRoi():
         z_dims = i*np.ones((array_dat.shape[:2]+(1,)))
         plane_data = np.concatenate((array_dat,z_dims),axis=2)
         roi_data.extend(list(plane_data))
-    try:
-        roi = ROI(polygons=roi_data,im_shape=dataset.frame_shape[:3])
-    except:
-        return jsonify(result='failed to create ROI')
+
+    roi = ROI(polygons=roi_data,im_shape=dataset.frame_shape[:3])
 
     roi.label = roi_label
     roi.id = roi_id
@@ -539,6 +538,43 @@ def deleteRoi():
     dataset.add_ROIs(ROIList(rois), label=label)
 
     return jsonify(result='success')
+
+
+@app.route('/simplifyRoi', methods=['GET','POST'])
+def simplifyRoi():
+    roi_id = request.form.get('roiId')
+    frame_shape = json.loads(request.form.get('frame_shape'))
+    points = json.loads(request.form.get('points'))
+   
+    roi_data = []
+    for i,plane in enumerate(points):
+        array_dat = np.array(plane)
+        z_dims = i*np.ones((array_dat.shape[:2]+(1,)))
+        plane_data = np.concatenate((array_dat,z_dims),axis=2)
+        roi_data.extend(list(plane_data))
+    try:
+        roi = ROI(polygons=roi_data,im_shape=frame_shape[:3])
+    except:
+        return jsonify(result='failed to create ROI')
+
+    smoother = SmoothROIBoundaries()
+    roi = smoother.apply([roi])[0]
+
+    convertedRoi = []
+    try:
+        for i in xrange(roi.im_shape[0]):
+            convertedRoi.append([])
+    except:
+        for i in xrange(np.max(np.array(roi.coords)[:,:,2])):
+            convertedRoi.append([])
+    for poly in roi.polygons:
+        coords = np.array(poly.exterior.coords)
+        plane = int(coords[0,-1])
+        coords = coords[:,:2].astype(int).tolist()
+        convertedRoi[plane].append(coords)
+
+    return jsonify({roi_id: convertedRoi})
+
 
 @app.route('/getFolders/<directory>')
 def getFolders(directory):

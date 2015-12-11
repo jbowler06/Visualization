@@ -12,8 +12,13 @@ function FrameViewer(gl) {
     this.planeSelect = $('#plane_select');
 
     this.offset = { x:0, y:0 };
+    this.frameShape = { width:0, height:0 };
+    this.channel = 0;
+    this.cycle = 0;
     this.roiViewers = [];
     this.nChannels = 1;
+
+    this.length = 0;
 
     this.mouseState = {
         mouseDown: false

@@ -5,10 +5,12 @@ function roi(id,color) {
     this.mask = {};
     this.display = true;
 
-    this.widthScale = g_frameViewer.mainProjectionWidth/g_sequenceInfo.width;
+    //TODO: remove theis global reference
+    this.widthScale = g_frameViewer.mainProjectionWidth/g_frameViewer.width;
     this.widthConst = g_frameViewer.mainProjectionWidth/2;
 
-    this.heightScale = g_frameViewer.mainProjectionHeight/g_sequenceInfo.height;
+    //TODO: remove theis global reference
+    this.heightScale = g_frameViewer.mainProjectionHeight/g_frameViewer.height;
     this.heightConst = g_frameViewer.mainProjectionHeight-g_frameViewer.mainProjectionHeight/2;
     
     this.segments = []
@@ -16,13 +18,13 @@ function roi(id,color) {
 
 
     this.createRoiTab = function() {
-        var thisId = 'roi_tab_0';
+        var thisId = 'roi_tab_' + this.id;
         var infoTab = $('#roi_tab_template').clone(true)
                               .attr('id',thisId)
                               .removeClass('hidden')
                               .addClass('activeRoiTab')
                               .appendTo('#roi_tab_container');
-        infoTab.find('.roiNumberSpan').text('0');
+        infoTab.find('.roiNumberSpan').text('');
         infoTab.find('.roiIdSpan').text(id);
         return infoTab;
     }
@@ -46,7 +48,7 @@ function roi(id,color) {
                         segment.polyBuffer.points.push(tris[i]*this.widthScale-this.widthConst)
                     } else {
                         segment.polyBuffer.points.push(
-                            g_frameViewer.mainProjectionHeight*(1/2-tris[i]/g_sequenceInfo.height));
+                            g_frameViewer.mainProjectionHeight*(1/2-tris[i]/g_frameViewer.height));
                         segment.polyBuffer.points.push(0);
                     }
                 }
@@ -56,7 +58,7 @@ function roi(id,color) {
                 for (var i=0; i < roiPoints[plane][seg].length; i++) {
                     segment.boundaryBuffer.points.push(roiPoints[plane][seg][i][0]*this.widthScale-this.widthConst)
                     segment.boundaryBuffer.points.push(
-                        g_frameViewer.mainProjectionHeight*(1/2-roiPoints[plane][seg][i][1]/g_sequenceInfo.height));
+                        g_frameViewer.mainProjectionHeight*(1/2-roiPoints[plane][seg][i][1]/g_frameViewer.height));
                     segment.boundaryBuffer.points.push(0);
                 }
 

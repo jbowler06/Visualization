@@ -218,16 +218,6 @@
                             colspan="2">load all projections</td>
                     </tr-->
                     <tr>
-                        <td class="tableButton" 
-                            id="draw_roi_button" 
-                            colspan="2">draw roi</td>
-                    </tr>
-                    <tr>
-                        <td class="tableButton" 
-                            id="roi_select_button" 
-                            colspan="2">select roi</td>
-                    </tr>
-                    <tr>
                         <td class="tableButton clearRoiButton" colspan="2">clear rois</td>
                     </tr>
                 </table>
@@ -277,26 +267,48 @@
                        style="width:170px"></td>
             </tr>
             <tr>
-                <table><tr>
-                <td>
-                    <div id="drawing_complete_button"
-                         class="button halfButton floatLeft slim">
-                         complete
-                     </div>
-                 </td>
-                 <td>
-                    <div id="roi_delete_button"
-                         class="button halfButton floatLeft slim">
-                         delete
-                    </div>
-                 </td>
-                 <td>
-                    <div id="roi_move_segment_button"
-                         class="button halfButton floatLeft slim">
-                         move
-                    </div>
-                 </td>
-                 </tr></table>
+                <table>
+                    <tr>
+                    <td>
+                        <div id="draw_roi_button"
+                             class="button halfButton floatLeft slim">
+                             draw
+                        </div>
+                    </td>
+                    <td>
+                        <div id="roi_select_button"
+                             class="button halfButton floatLeft slim">
+                             select
+                        </div>
+                    </td>
+                    <td>
+                        <div id="simplify_roi_button"
+                             class="button halfButton floatLeft slim">
+                             simplify
+                        </div>
+                    </td>
+                    </tr>
+                    <tr>
+                    <td>
+                        <div id="drawing_complete_button"
+                             class="button halfButton floatLeft slim">
+                             save
+                         </div>
+                     </td>
+                     <td>
+                        <div id="roi_delete_button"
+                             class="button halfButton floatLeft slim">
+                             delete
+                        </div>
+                     </td>
+                     <td>
+                        <div id="roi_move_segment_button"
+                             class="button halfButton floatLeft slim">
+                             move
+                        </div>
+                     </td>
+                     </tr>
+                 </table>
             </tr>
         </table>
     </div>
@@ -465,11 +477,6 @@
         var g_frameViewer;
         var g_roiViewer;
         var g_roiEditor;
-
-        var g_sequenceInfo = {
-            max: 1,
-        };
-
 
         function initShaders(gl, fragShader) {
             var fragmentShader = getShader(gl, fragShader)
@@ -780,8 +787,8 @@
                             planes: [$('#plane_select').val()],
                             frameDelta: g_frameBuffer.frameDelta,
                             normingVal: g_normingVal,
-                            channel: g_sequenceInfo.channel,
-                            cycle: g_sequenceInfo.cycle,
+                            channel: g_frameViewer.channel,
+                            cycle: g_frameViewer.cycle,
                             sequenceId: g_frameBuffer.sequenceId
                         },
                         cache: false,
@@ -921,10 +928,12 @@
                     alert(response.error);
                     return;
                 }
-                response.channel = g_sequenceInfo.channel;
-                response.cycle = g_sequenceInfo.cycle;
-                g_sequenceInfo=response,
-                $('#frame_num_label').text(g_sequenceInfo.max)  
+
+                Object.keys(response).map(function(key) {
+                    g_frameViewer[key] = response[key];
+                });
+
+                $('#frame_num_label').text(g_frameViewer.length)  
 
                 if (response['channel_0']) {
                     var chan1CutoffInput = $('#ch1_norm_input');
@@ -952,7 +961,7 @@
                 fetching = true
                 resizeBuffers(g_frameViewer.glContext,response.width,response.height)
                 positioningContext = createPositioningContext('#positioning_canvas');
-                $('#frame_slider').attr('max',g_sequenceInfo.max)
+                $('#frame_slider').attr('max',g_frameViewer.length)
 
                 $('#plane_select').html('');
                 $('#plane_select').attr('max',Math.max.apply(null,response.planes))
@@ -987,8 +996,8 @@
             }
             g_roiViewer.clear();
             g_frameViewer.initMouse($('#roi_editing_canvas'));
-            g_frameBuffer = new FrameBuffer(Date.now(),1000,g_sequenceInfo.planes)
-            g_frameBuffer.set_planes(g_sequenceInfo.planes);
+            g_frameBuffer = new FrameBuffer(Date.now(),1000,g_frameViewer.planes);
+            g_frameBuffer.set_planes(g_frameViewer.planes);
             g_normingVal = [$('#ch1_norm_input').val(),$('#ch2_norm_input').val()]
             if (!g_normingVal) {
                 alert('normalizing value unset')
@@ -998,8 +1007,8 @@
             }
 
             var newUrl = '{{ url_for('.index',_external=True) }}?dataset=' + encodeURIComponent(g_filePath) +
-                        '&channel=' + encodeURIComponent(g_sequenceInfo.channel) +
-                        '&cycle=' + encodeURIComponent(g_sequenceInfo.cycle) +
+                        '&channel=' + encodeURIComponent(g_frameViewer.channel) +
+                        '&cycle=' + encodeURIComponent(g_frameViewer.cycle) +
                         '&cutoff1=' + encodeURIComponent(g_normingVal[0]) + 
                         '&cutoff2=' + encodeURIComponent(g_normingVal[1]);
             window.history.pushState("string","dataset",newUrl);
@@ -1091,8 +1100,8 @@
             g_filePath = fullPath
 
             if ((fullPath.slice(-4) == 'sima') || (fullPath.slice(-2) == 'h5')) {
-                g_sequenceInfo.channel = $('#channel_select').val()
-                g_sequenceInfo.cycle = $('#cycle_select').val()
+                g_frameViewer.channel = $('#channel_select').val()
+                g_frameViewer.cycle = $('#cycle_select').val()
                 $('#load_box').addClass('hidden')
                 $('#load_button').removeClass('selected')
                 setSelectedData()
@@ -1182,12 +1191,12 @@
                     $('#roi_tab_container .roiPolygonsButton').removeClass('viewing');
                 }
             } else {
-                var roiNum = parseInt(thisParent.substring(8));
+                var roiId = parseInt(thisParent.substring(8));
                 if ($(this).hasClass('viewing')) {
-                    g_roiViewer.rois[roiNum].display = false;
+                    g_roiViewer.roi(roiId).display = false;
                     $(this).removeClass('viewing');
                 } else {
-                    g_roiViewer.rois[roiNum].display = true;
+                    g_roiViewer.roi(roiId).display = true;
                     $(this).addClass('viewing');
                 }
             }
@@ -1258,7 +1267,7 @@
                         return;
                         roiContext = createProjectionContext('#roi_canvas');
                         roiContext.uniform1i(roiContext.shaderProgram.colorModeUniform, colorMode);
-                        resizeBuffers(roiContext, g_sequenceInfo.width, g_sequenceInfo.height)
+                        resizeBuffers(roiContext, g_frameViewer.width, g_fraemViewer.height)
                         roiContext.frameViewer = false;
                         roiContext.numberRois = response.num_rois;
                         delete response.num_rois;
@@ -1341,8 +1350,8 @@
                         planes: [$('#plane_select').val()],
                         path: g_filePath,
                         normingVal: g_normingVal,
-                        channel: g_sequenceInfo.channel,
-                        cycle: g_sequenceInfo.cycle,
+                        channel: g_frameViewer.channel,
+                        cycle: g_frameViewer.cycle,
                         sequenceId: g_frameBuffer.sequenceId
                     }
                 }).done(function(response) {
@@ -1398,11 +1407,11 @@
                 cache: false,
                 data: {
                     frames: [g_frameBuffer.current],
-                    planes: g_sequenceInfo.planes,
+                    planes: g_frameViewer.numPlanes(),
                     path: g_filePath,
                     normingVal: g_normingVal,
-                    channel: g_sequenceInfo.channel,
-                    cycle: g_sequenceInfo.cycle,
+                    channel: g_frameViewer.channel,
+                    cycle: g_frameViewer.cycle,
                     sequenceId: g_frameBuffer.sequenceId
                 }
             }).done(function(response) {
@@ -1531,8 +1540,6 @@
         });
 
 
-        var drawingIndex = 0;
-        var drawingSegmentIndex;
         $('#draw_roi_button').click(function() {
             if ($(this).hasClass('selected')) {
                 $(this).removeClass('selected');
@@ -1542,79 +1549,33 @@
                 return;
             }
 
-            storeRois();
-
             if ($('#label_select').val() === "") {
                 var newLabel = Date.now();
                 addRoiLabel(newLabel);
-                g_frameViewer.allowDrag = false;
             }
 
             $(this).addClass('selected');
             g_frameViewer.allowDrag = false;
 
-            var color = tinycolor({h:Math.random()*360.0, s:65, v:50}).toRgb();
-            color.r /= 255;
-            color.g /= 255;
-            color.b /= 255;
+            if (!g_roiEditor.rois.length) {
+                var color = tinycolor({h:Math.random()*360.0, s:65, v:50}).toRgb();
+                color.r /= 255;
+                color.g /= 255;
+                color.b /= 255;
 
-            var newRoi = new roi(Date.now(),color);
-            g_roiEditor.rois[0] = newRoi;
-            $('#drawing_id').text(newRoi.id);
-            drawingSegmentIndex = 0;
+                var newRoi = new roi(Date.now(),color);
+                $('.roiTab').removeClass('selected');
+                newRoi.infoTab.addClass('selected');
+                g_roiEditor.rois[0] = newRoi;
+                $('#drawing_id').text(newRoi.id);
 
-            g_roiEditor.render();
-            g_roiEditor.mouseClickHandler = drawRoiMouseClickHandler;
-            g_roiEditor.mouseDragHandler = drawRoiMouseClickHandler;
+                g_roiEditor.render();
+            }
+            g_roiEditor.mouseClickHandler = MouseHandlers.drawRoi;
+            g_roiEditor.mouseDragHandler = MouseHandlers.drawRoi;
         });
 
-
-        function drawRoiMouseClickHandler(x, y) {
-            if (g_frameViewer.getCurrentPlane() == 0) {
-                for (plane_idx = 0; plane_idx < g_frameViewer.numPlanes(); plane_idx++) {
-                    g_roiEditor.rois[0].addPoint(
-                        g_roiEditor.gl,plane_idx,0,[x,y]);
-                }
-            } else {
-                g_roiEditor.rois[0].addPoint(
-                    g_roiEditor.gl,g_frameViewer.getCurrentPlane()-1,0,[x,y]);
-            }
-            g_roiEditor.render();
-        }
-
-
-        function translateSegmentMouseDragHandler(x,y,prev_x,prev_y) {
-            if (!g_roiEditor.rois.length) {
-                return;
-            }
-            
-            var roi = g_roiEditor.rois[0];
-            if (typeof(roi) !== "undefined") {
-                var points = roi.points;
-                var plane = g_frameViewer.getCurrentPlane()-1;
-                var planes = []
-                if (plane != -1) {
-                    planes = [plane]
-                } else {
-                    planes = Array(g_frameViewer.numPlanes()).fill().map((x,i)=>i)
-                }
-
-                planes.map(function(plane) {
-                    var dx = x-prev_x;
-                    var dy = y-prev_y
-                    points[plane].map(function(e,a,i) {
-                        e.map(function(e2,a2,i2){
-                            e2[0] += dx;
-                            e2[1] += dy;
-                        });
-                    });
-                    roi.setPoints(g_roiEditor.gl,points);
-                    g_roiEditor.render();
-                });
-            }
-        }
-
-
+      
         function updateRoi(roi) {
             $.ajax({
                 url: '{{ url_for('.updateRoi', _external=True) }}',
@@ -1633,6 +1594,30 @@
             }).always(function() {
             });
         }
+
+        function smoothRoi(roi) {
+            $.ajax({
+                url: '{{ url_for('.simplifyRoi', _external=True) }}',
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    frame_shape: JSON.stringify([g_frameViewer.numPlanes(),
+                        g_frameViewer.height, g_frameViewer.width]),
+                    points: JSON.stringify(roi.points),
+                    roiId: roi.id
+                }
+            }).done(function(response) {
+                var roiLabels = Object.keys(response);
+                g_roiEditor.popRoi(roi.id);
+                g_roiEditor.storePolygonRoi(response, roiLabels, 0);
+            }).fail(function() {
+                alert('there was an error updating the ROI set');
+            }).always(function() {
+            });
+        }
+
+        $('#simplify_roi_button').click(function() {smoothRoi(g_roiEditor.rois[0])});
 
 
         function editRoi(roi) {
@@ -1697,12 +1682,26 @@
             } else {
                 g_frameViewer.allowDrag = false;
                 $(this).addClass('selected');
-                g_roiEditor.mouseDragHandler = translateSegmentMouseDragHandler;
+                g_roiEditor.mouseDragHandler = MouseHandlers.translateRoi;
             }
         });
 
 
-        function selectSegmentMouseClickHandler(x, y) {
+        $('#roi_select_button').click(function() {
+            if (!$(this).hasClass('selected')) {
+                $(this).addClass('selected');
+                g_frameViewer.allowDrag = false;
+                g_roiEditor.mouseClickHandler = MouseHandlers.selectRoi;
+            } else {
+                $(this).removeClass('selected');
+                g_frameViewer.allowDrag = true;
+                g_roiEditor.mouseClickHandler = undefined;
+            }
+        });
+
+
+        MouseHandlers = {
+            'selectRoi': function(x, y) {
             $('#roi_select_button').trigger('click');
             $.ajax({
                 url: '{{ url_for('.selectRoi', _external=True) }}',
@@ -1724,21 +1723,52 @@
                 })
                 .always(function() {
                 });
+            },
 
-        }
+           'drawRoi': function(x, y) {
+                if (g_frameViewer.getCurrentPlane() == 0) {
+                    for (plane_idx = 0; plane_idx < g_frameViewer.numPlanes(); plane_idx++) {
+                        g_roiEditor.rois[0].addPoint(
+                            g_roiEditor.gl,plane_idx,0,[x,y]);
+                    }
+                } else {
+                    g_roiEditor.rois[0].addPoint(
+                        g_roiEditor.gl,g_frameViewer.getCurrentPlane()-1,0,[x,y]);
+                }
+                g_roiEditor.render();
+            },
 
-        $('#roi_select_button').click(function() {
-            if (!$(this).hasClass('selected')) {
-                $(this).addClass('selected');
-                g_frameViewer.allowDrag = false;
-                g_roiEditor.mouseClickHandler = selectSegmentMouseClickHandler;
-            } else {
-                $(this).removeClass('selected');
-                g_frameViewer.allowDrag = true;
-                g_roiEditor.mouseClickHandler = undefined;
+            'translateRoi': function(x,y,prev_x,prev_y) {
+                if (!g_roiEditor.rois.length) {
+                    return;
+                }
+                
+                var roi = g_roiEditor.rois[0];
+                if (typeof(roi) !== "undefined") {
+                    var points = roi.points;
+                    var plane = g_frameViewer.getCurrentPlane()-1;
+                    var planes = []
+                    if (plane != -1) {
+                        planes = [plane]
+                    } else {
+                        planes = Array(g_frameViewer.numPlanes()).fill().map((x,i)=>i)
+                    }
+
+                    planes.map(function(plane) {
+                        var dx = x-prev_x;
+                        var dy = y-prev_y
+                        points[plane].map(function(e,a,i) {
+                            e.map(function(e2,a2,i2){
+                                e2[0] += dx;
+                                e2[1] += dy;
+                            });
+                        });
+                        roi.setPoints(g_roiEditor.gl,points);
+                        g_roiEditor.render();
+                    });
+                }
             }
-        });
-
+        }
 
         KeyboardHandlers = {
             'roiDrawingMode': function(e) {
@@ -1749,15 +1779,13 @@
                     color.b /= 255;
 
                     var newRoi = new roi(Date.now(),color);
-                    g_roiEditor.rois[drawingIndex] = newRoi;
-                    drawingSegmentIndex = 0;
+                    g_roiEditor.rois[0] = newRoi;
 
                     g_roiEditor.render();
                 } else if (e.keyCode == 83) {
-                    drawingSegmentIndex++;
+                    //TODO:implement multi segment roi drawing
                 } else if (e.keyCode == 68) {
-                    delete g_roiEditor.rois[drawingIndex]
-                    drawingIndex = Math.max(-1,drawingIndex-1);
+                    delete g_roiEditor.rois[0]
                     g_roiEditor.render();
                 }
             },
@@ -1823,8 +1851,8 @@
             //console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
 
             if (pixelValues[2] != 0) {
-                var transXval = pixelValues[0]*g_sequenceInfo.width/255;
-                var transYval = (255-pixelValues[1])*g_sequenceInfo.height/255;
+                var transXval = pixelValues[0]*g_frameViewer.width/255;
+                var transYval = (255-pixelValues[1])*g_frameViewer.height/255;
             }
 
             if (typeof(g_roiEditor.mouseClickHandler) !== 'undefined') {
@@ -1854,8 +1882,8 @@
                     positioningContext.UNSIGNED_BYTE, pixelValues);
 
                 if (pixelValues[2] != 0) {
-                    var transXval = pixelValues[0]*g_sequenceInfo.width/255;
-                    var transYval = (255-pixelValues[1])*g_sequenceInfo.height/255;
+                    var transXval = pixelValues[0]*g_frameViewer.width/255;
+                    var transYval = (255-pixelValues[1])*g_frameViewer.height/255;
                     
                     if ((typeof(g_roiEditor.mouseDragHandler) !== 'undefined') &&
                             (typeof(this.prevPoint) !== 'undefined')) {
