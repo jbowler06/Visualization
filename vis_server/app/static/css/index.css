@@ -319,7 +319,7 @@ input.norming_value_input{
 
 #drawing_controls {
     width: 250px;
-    height: 175px;
+    height: 200px;
     right: 0px;
     bottom: 0px;
     position: absolute;
@@ -327,4 +327,25 @@ input.norming_value_input{
     z-index: 10;
     background-color: #000;
 
+}
+
+.editablePoint {
+    width: 0px;
+    height: 0px;
+    cursor: move;
+    z-index: 100;
+    position: relative; 
+    float: left;
+    overflow: visible;
+}
+
+.editableImageContainer {
+    width: 10px;
+    height: 10px;
+    background-image: url(../images/red-circle.png);
+    background-size: 10px 10px;
+    background-repeat: no-repeat;
+    position: relative;
+    left: -5px;
+    top: -5px;
 }

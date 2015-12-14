@@ -308,14 +308,24 @@
                         </div>
                      </td>
                      </tr>
+                     <tr>
+                     <td>
+                        <div id="roi_edit_button"
+                             class="button halfButton floatLeft slim">
+                             edit
+                        </div>
+                     </td>
+                     </tr>
                  </table>
             </tr>
         </table>
     </div>
 
-
     <div class="width100 height100">
         <div class="canvasContainer">
+            <div class="editablePoint hidden" id="editable_point_template">
+                <div class="editableImageContainer"></div>
+            </div>
             <canvas class="webGlCanvas" id="gl_canvas" width="800" height="700"></canvas>
             <canvas class="webGlCanvas" id="roi_canvas" width="800" height="700"></canvas>
             <canvas class="webGlCanvas" id="roi_editing_canvas" width="800" height="700"></canvas>
@@ -358,9 +368,19 @@
     <script id="colormap-shader-fs" type="x-shader/x-fragment">
         precision mediump float;
         varying vec2 vTextureCoord;
+        uniform float startX;
+        uniform float startY;
 
         void main(void) {
-            gl_FragColor = vec4(vTextureCoord.s, vTextureCoord.t, 0.5, 1.0);
+            if (false) {
+                gl_FragColor = vec4(vTextureCoord.s, vTextureCoord.t, 0.5, 1.0);
+            } else {
+                if ((vTextureCoord.s > startX) && (vTextureCoord.t) > startY) {
+                    gl_FragColor = vec4(vTextureCoord.s, vTextureCoord.t, 0.5, 1.0);
+                } else {
+                    gl_FragColor = vec4(0, 0, 0, 0);
+                }
+            }
         }
     </script>
 
@@ -710,6 +730,11 @@
             initShadersGen(gl, 'colormap-shader-fs', 'colormap-shader-vs');
             gl.shaderProgram.textureCoordAttribute = gl.getAttribLocation(
                     gl.shaderProgram, 'aTextureCoord');
+            gl.shaderProgram.startX = gl.getUniformLocation(gl.shaderProgram, "startX");
+            gl.uniform1f(gl.shaderProgram.startX, 0)
+            gl.shaderProgram.startY = gl.getUniformLocation(gl.shaderProgram, "startY");
+            gl.uniform1f(gl.shaderProgram.startY, 0)
+
             gl.enableVertexAttribArray(gl.shaderProgram.textureCoordAttribute);
             drawColorMap(gl,0);
 
@@ -1510,6 +1535,7 @@
 
 
         $('#set_roi_label_button').click(function() {
+            g_roiViewer.clear();
             addRoiLabel($('#roi_label_input').val());
             $('#roi_label_input').val('')
         });
@@ -1594,6 +1620,29 @@
             }).always(function() {
             });
         }
+
+        /*
+        function updateRois() {
+            rois = {}
+            g_roiViewer.rois.forEach(function(roi,array,idx) {
+                rois[roi.id] = roi.points;
+            });
+
+            $.ajax({
+                type: 'POST',
+                cache: false,
+                data: {
+                    path: g_filePath,
+                    label: $('#label_select').val(),
+                    points: JSON.stringify(rois),
+                }
+            }).done(function() {
+            }).fail(function() {
+                alert('there was an error updating the ROI set');
+            }).always(function() {
+            });
+        }
+        */
 
         function smoothRoi(roi) {
             $.ajax({
@@ -1700,6 +1749,65 @@
         });
 
 
+        function _addMarker(left, top, id) {
+            return $('#editable_point_template').clone(true)
+                                         .removeClass('hidden')
+                                         .attr('id',id)
+                                         .appendTo('.canvasContainer')
+                                         .addClass('active')
+                                         .css('left',left)
+                                         .css('top',top);
+        }
+
+
+        function setEditPoints() {
+            var button = $('#roi_edit_button');
+            if (button.hasClass('selected')) {
+                button.removeClass('selected');
+                $('.editablePoint.active').remove();
+                g_frameViewer.allowDrag = true;
+                return;
+            }
+
+            button.addClass('selected');
+            g_frameViewer.allowDrag = false;
+            
+            var plane = Math.max(g_frameViewer.getCurrentPlane()-1, 0);
+            g_roiEditor.rois[0].points[plane][0].map(function(point, idx) {
+
+                positioningContext.uniform1f(
+                    positioningContext.shaderProgram.startX,
+                    point[0]/g_frameViewer.width);
+                positioningContext.uniform1f(
+                    positioningContext.shaderProgram.startY, 
+                    1-point[1]/g_frameViewer.height);
+                drawColorMap(positioningContext, 0);
+
+                var canvas = $('#positioning_canvas');
+                var height = canvas.height();
+                var width = canvas.width();
+                var pixelValues = new Uint8Array(height*width*4);
+                positioningContext.readPixels(0, 0, width, height,
+                    positioningContext.RGBA, positioningContext.UNSIGNED_BYTE,
+                    pixelValues);
+
+                var i = 0;
+                for (; i < pixelValues.length; i+=4) {
+                    if (pixelValues[i] != 0) break;
+                }
+
+                _addMarker((i/4)%width, height-Math.floor(i/4/width), ('vert_' + idx))
+
+                positioningContext.uniform1f(
+                    positioningContext.shaderProgram.startX, 0);
+                positioningContext.uniform1f(
+                    positioningContext.shaderProgram.startY, 0);
+                drawColorMap(positioningContext, 0);
+            });
+        }
+
+        $('#roi_edit_button').click(setEditPoints);
+            
         MouseHandlers = {
             'selectRoi': function(x, y) {
             $('#roi_select_button').trigger('click');
@@ -1725,7 +1833,7 @@
                 });
             },
 
-           'drawRoi': function(x, y) {
+           'drawRoi': function(x, y, e) {
                 if (g_frameViewer.getCurrentPlane() == 0) {
                     for (plane_idx = 0; plane_idx < g_frameViewer.numPlanes(); plane_idx++) {
                         g_roiEditor.rois[0].addPoint(
@@ -1735,6 +1843,7 @@
                     g_roiEditor.rois[0].addPoint(
                         g_roiEditor.gl,g_frameViewer.getCurrentPlane()-1,0,[x,y]);
                 }
+
                 g_roiEditor.render();
             },
 
@@ -1856,7 +1965,7 @@
             }
 
             if (typeof(g_roiEditor.mouseClickHandler) !== 'undefined') {
-                g_roiEditor.mouseClickHandler(transXval, transYval);
+                g_roiEditor.mouseClickHandler(transXval, transYval, e);
             }
 
         });
@@ -1905,6 +2014,81 @@
             positioningContext.readPixels(relX, relY, 1, 1, positioningContext.RGBA, positioningContext.UNSIGNED_BYTE, pixelValues);
             console.log(pixelValues[0] + ' ' + pixelValues[1] + ' ' + pixelValues[2]);
         });
+
+        var selected = null,
+            x_pos = 0, y_pos = 0,
+            x_elem = 0, y_elem = 0;
+
+        function _drag_init(elem) {
+            selected = elem;
+            x_elem = x_pos - selected.offsetLeft;
+            y_elem = y_pos - selected.offsetTop;
+        }
+
+        function _move_elem(e) {
+            x_pos = document.all ? window.event.clientX : e.pageX;
+            y_pos = document.all ? window.event.clientY : e.pageY;
+            if (selected !== null) {
+                selected.style.left = (x_pos - x_elem) + 'px';
+                selected.style.top = (y_pos - y_elem) + 'px';
+
+                var parentOffset = $('.canvascontainer').offset();
+                var offsetY = $('#roi_editing_canvas').height() - selected.offsetTop;
+                var offsetX = selected.offsetLeft;
+
+                var pixelValues = new Uint8Array(4);
+                positioningContext.readPixels(offsetX, offsetY, 1, 1, positioningContext.RGBA,
+                    positioningContext.UNSIGNED_BYTE, pixelValues);
+
+                var transXval = pixelValues[0]*g_frameViewer.width/255;
+                var transYval = (255-pixelValues[1])*g_frameViewer.height/255;
+
+                var newPoints = g_roiEditor.rois[0].points;
+                
+                var plane = g_frameViewer.getCurrentPlane()-1;
+                if (plane < 0) {
+                    newPoints.map(function(_, idx, arr) {
+                        arr[idx][0][selected.id.substr(5)] = [transXval, transYval];
+                    });
+                } else {
+                    newPoints[plane][0][selected.id.substr(5)] = [transXval, transYval];
+                }
+                g_roiEditor.rois[0].setPoints(g_roiEditor.gl, newPoints);
+                g_roiEditor.render();
+
+            }
+        }
+
+        function _destroy() {
+            if (selected !== null) {
+                console.log(selected.offsetLeft + " " + selected.offsetTop);
+                /*var parentOffset = $('.canvascontainer').offset();
+                var offsetY = $('#roi_editing_canvas').height() - selected.offsetTop;
+                var offsetX = selected.offsetLeft;
+
+                var pixelValues = new Uint8Array(4);
+                positioningContext.readPixels(offsetX, offsetY, 1, 1, positioningContext.RGBA,
+                    positioningContext.UNSIGNED_BYTE, pixelValues);
+
+                var transXval = pixelValues[0]*g_frameViewer.width/255;
+                var transYval = (255-pixelValues[1])*g_frameViewer.height/255;
+
+                var newPoints = g_roiEditor.rois[0].points;
+                newPoints[0][0][0] = [transXval, transYval];
+                g_roiEditor.rois[0].setPoints(g_roiEditor.gl, newPoints);
+                g_roiEditor.render();*/
+            }
+            
+            selected = null;
+        }
+
+        $('.editablePoint').bind('mousedown', function () {
+            _drag_init(this);
+            return false;
+        });
+        
+        document.onmousemove = _move_elem;
+        document.onmouseup = _destroy;
 
     </script>
 

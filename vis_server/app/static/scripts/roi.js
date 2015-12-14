@@ -13,9 +13,8 @@ function roi(id,color) {
     this.heightScale = g_frameViewer.mainProjectionHeight/g_frameViewer.height;
     this.heightConst = g_frameViewer.mainProjectionHeight-g_frameViewer.mainProjectionHeight/2;
     
-    this.segments = []
-    this.points = []
-
+    this.segments = [];
+    this.points = [];
 
     this.createRoiTab = function() {
         var thisId = 'roi_tab_' + this.id;
@@ -36,7 +35,7 @@ function roi(id,color) {
         this.type = 'polygons';
         for (var plane in roiPoints) {
             this.segments[parseInt(plane)] = [];
-            for (var seg = 0; seg  < roiPoints[plane].length; seg++) {
+            for (var seg = 0; ((typeof(roiPoints[plane]) !== "undefined") && (seg < roiPoints[plane].length)); seg++) {
                 var segment = {}
                 segment.polyBuffer = gl.createBuffer();
                 segment.polyBuffer.points = [];

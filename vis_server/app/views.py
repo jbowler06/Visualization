@@ -502,6 +502,8 @@ def updateRoi():
     dataset = ImagingDataset.load(ds_path)
     roi_data = []
     for i,plane in enumerate(points):
+        if plane is None or not len(plane):
+            continue
         array_dat = np.array(plane)
         z_dims = i*np.ones((array_dat.shape[:2]+(1,)))
         plane_data = np.concatenate((array_dat,z_dims),axis=2)
@@ -548,6 +550,8 @@ def simplifyRoi():
    
     roi_data = []
     for i,plane in enumerate(points):
+        if plane is None or not len(plane):
+            continue
         array_dat = np.array(plane)
         z_dims = i*np.ones((array_dat.shape[:2]+(1,)))
         plane_data = np.concatenate((array_dat,z_dims),axis=2)
