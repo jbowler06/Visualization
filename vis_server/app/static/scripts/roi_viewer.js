@@ -64,7 +64,8 @@ function ROIViewer(canvas, frameViewer, slider) {
         color.b /= 255;
 
         var newRoi = new roi(roiLabels[i],color);
-        newRoi.setPoints(this.gl,response[roiLabels[i]]);
+        newRoi.label = response[roiLabels[i]].label;
+        newRoi.setPoints(this.gl,response[roiLabels[i]].points);
         this.rois[i] = newRoi;
 
         $('#roi_control_heading roiPolygonsButton').addClass('on');
@@ -199,8 +200,12 @@ function ROIViewer(canvas, frameViewer, slider) {
     }
 
     this.popRoi = function(id) {
+        if (typeof(id) == 'undefined') {
+            id = this.rois[0].id;
+        }
+
         var roi = this.roi(id);
-        if (roi !== "undefined") {
+        if (typeof(roi) !== "undefined") {
             this.rois.splice(this.rois.indexOf(roi),1);
             self.render();
             return roi;

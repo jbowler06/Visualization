@@ -1,6 +1,6 @@
 function roi(id,color) {
     this.id = id;
-    this.label = "";
+    this.label = id;
     this.color = color;
     this.mask = {};
     this.display = true;

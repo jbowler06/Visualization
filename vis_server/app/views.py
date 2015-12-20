@@ -331,18 +331,23 @@ def getRois():
         if roi.id is None:
             roi.id = i
 
-        convertedRois[roi.id] = []
+        roi_points = []
         try:
             for i in xrange(roi.im_shape[0]):
-                convertedRois[roi.id].append([])
+                roi_points.append([])
         except:
             for i in xrange(np.max(np.array(roi.coords)[:,:,2])):
-                convertedRois[roi.id].append([])
+                roi_points.append([])
         for poly in roi.polygons:
             coords = np.array(poly.exterior.coords)
             plane = int(coords[0,-1])
             coords = coords[:,:2].astype(int).tolist()
-            convertedRois[roi.id][plane].append(coords)
+            roi_points[plane].append(coords)
+
+        convertedRois[roi.id] = {
+            'label': roi.label,
+            'points': roi_points
+        }
 
     return jsonify(**convertedRois)
 
@@ -488,7 +493,7 @@ def selectRoi():
                 if poly.contains(point):
                     return jsonify(label=roi.label,id=roi.id)
 
-    return jsonify(result='none found')
+    return None
 
 
 @app.route('/updateRoi',methods=['GET','POST'])
@@ -577,7 +582,7 @@ def simplifyRoi():
         coords = coords[:,:2].astype(int).tolist()
         convertedRoi[plane].append(coords)
 
-    return jsonify({roi_id: convertedRoi})
+    return jsonify({roi_id: {'points': convertedRoi}})
 
 
 @app.route('/getFolders/<directory>')

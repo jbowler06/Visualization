@@ -85,8 +85,9 @@ body {
     background-color: #555;
     cursor: pointer;
 }
-.selected {
-
+.button.disabled {
+    color: #500;
+    background-color: #222;
 }
 .selected {
     background-color: #555;
