@@ -169,7 +169,7 @@ function ROIViewer(canvas, frameViewer, slider) {
                 var segment = segments[i];
                 this.drawSegmentSurface(segment);
                 this.drawSegmentBoundary(segment);
-                this.drawSegmentBoundaryPoints(segment);
+                //this.drawSegmentBoundaryPoints(segment);
             }
         }
 
