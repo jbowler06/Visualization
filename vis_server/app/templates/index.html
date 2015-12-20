@@ -1779,6 +1779,7 @@
                         }
                     }).done(function() {
                         $('#drawing_id').text('');
+                        $('.roiEditButton').addClass('disabled');
                         var roi = g_roiEditor.rois.pop();
                         roi.infoTab.detach();
                         g_roiEditor.render();
