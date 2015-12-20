@@ -18,6 +18,8 @@ import matplotlib.cm
 import re
 import time
 import numpy.ma as ma
+import json
+from shapely.geometry.point import Point
 
 from flask import render_template
 from flask import request
@@ -31,6 +33,8 @@ from .decorators import async
 from sima import ImagingDataset
 from sima import Sequence
 from sima.ROI import ROIList
+from sima.ROI import ROI
+from sima.segment import SmoothROIBoundaries
 
 from PIL import Image
 import StringIO
@@ -88,6 +92,7 @@ def index():
     cutoff2 = request.args.get('cutoff2')
 
     return render_template('index.html',dataset=ds,channel=channel,cycle=cycle,cutoff1=cutoff1,cutoff2=cutoff2)
+    #return render_template('webgl_lesson1.html')
 
 @app.route('/getInfo', methods=['GET','POST'])
 def getInfo():
@@ -124,7 +129,7 @@ def getInfo():
         'planes': range(seq.shape[1]+1),
         'height': seq.shape[2],
         'width': seq.shape[3],
-        'max': length
+        'length': length
     }
 
     for channel in norm_factors.keys():
@@ -323,18 +328,26 @@ def getRois():
     rois = ROIList.load(os.path.join(dataset.savedir,'rois.pkl'),label=label)
 
     for i,roi in enumerate(rois):
-        if roi.label is None:
-            roi.label = i
-        convertedRois[roi.label] = {}
+        if roi.id is None:
+            roi.id = i
+
+        roi_points = []
+        try:
+            for i in xrange(roi.im_shape[0]):
+                roi_points.append([])
+        except:
+            for i in xrange(np.max(np.array(roi.coords)[:,:,2])):
+                roi_points.append([])
         for poly in roi.polygons:
             coords = np.array(poly.exterior.coords)
             plane = int(coords[0,-1])
-            #coords = list(coords[:,:2].ravel())
-            coords = coords[:,:2].tolist()
-            try:
-               convertedRois[roi.label][plane].append(coords)
-            except KeyError:
-                convertedRois[roi.label][plane] = [coords]
+            coords = coords[:,:2].astype(int).tolist()
+            roi_points[plane].append(coords)
+
+        convertedRois[roi.id] = {
+            'label': roi.label,
+            'points': roi_points
+        }
 
     return jsonify(**convertedRois)
 
@@ -389,6 +402,7 @@ def getFrames():
                         norming_val[ch] = factor
         else:
             vol = seq._get_frame(frame_number)
+            #vol = np.nanmean(seq[frame_number:frame_number+10,:,:,:,:],axis=0)
 
         if channel is not None:
             vol = vol[:,:,:,channel]
@@ -433,7 +447,11 @@ def setRoiLabel():
     new_label = request.form.get('newLabel')
 
     dataset = ImagingDataset.load(ds_path)
-    dataset.add_ROIs(dataset.ROIs[old_label], label=new_label)
+    if (old_label != ''):
+        rois = dataset.ROIs[old_label]
+    else:
+        rois = ROIList([])
+    dataset.add_ROIs(rois, label=new_label)
 
     labels = dataset.ROIs.keys()
 
@@ -445,16 +463,126 @@ def setRoiLabel():
     return render_template('select_list.html',options=['']+labels)
 
 
-
 @app.route('/deleteRoiSet', methods=['GET','POST'])
 def deleteRoiSet():
     ds_path = request.form.get('path')
+    dataset = ImagingDataset.load(ds_path)
     label = request.form.get('label')
 
     dataset = ImagingDataset.load(ds_path)
     dataset.delete_ROIs(label)
 
     return jsonify(result='success')
+
+
+@app.route('/selectRoi',methods=['GET','POST'])
+def selectRoi():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')
+    plane = float(request.form.get('z'))
+
+    point = Point(float(request.form.get('x')),float(request.form.get('y')))
+
+    dataset = ImagingDataset.load(ds_path)
+    rois = ROIList.load(os.path.join(dataset.savedir,'rois.pkl'),label=label)
+
+    for roi in rois:
+        for poly in roi.polygons:
+            z_coord = np.array(poly.exterior.coords)[0,2]
+            if z_coord == plane or plane == -1:
+                if poly.contains(point):
+                    return jsonify(label=roi.label,id=roi.id)
+
+    return None
+
+
+@app.route('/updateRoi',methods=['GET','POST'])
+def updateRoi():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')
+    points = json.loads(request.form.get('points'))
+    roi_label = request.form.get('roiLabel')
+    roi_id = request.form.get('roiId')
+
+    dataset = ImagingDataset.load(ds_path)
+    roi_data = []
+    for i,plane in enumerate(points):
+        if plane is None or not len(plane):
+            continue
+        array_dat = np.array(plane)
+        z_dims = i*np.ones((array_dat.shape[:2]+(1,)))
+        plane_data = np.concatenate((array_dat,z_dims),axis=2)
+        roi_data.extend(list(plane_data))
+
+    roi = ROI(polygons=roi_data,im_shape=dataset.frame_shape[:3])
+
+    roi.label = roi_label
+    roi.id = roi_id
+    try:
+        rois = dataset.ROIs[label]
+    except KeyError:
+        rois = []
+
+    rois.append(roi)
+    dataset.add_ROIs(ROIList(rois), label=label)
+
+    return jsonify(result='success')
+
+
+@app.route('/deleteRoi',methods=['GET','POST'])
+def deleteRoi():
+    ds_path = request.form.get('path')
+    label = request.form.get('label')
+    roi_id = request.form.get('roiId')
+
+    dataset = ImagingDataset.load(ds_path)
+    try:
+        rois = dataset.ROIs[label]
+    except KeyError:
+        return jsonify(result='failed to located ROI List')
+
+    rois = filter(lambda r: r.id != roi_id, rois)
+    dataset.add_ROIs(ROIList(rois), label=label)
+
+    return jsonify(result='success')
+
+
+@app.route('/simplifyRoi', methods=['GET','POST'])
+def simplifyRoi():
+    roi_id = request.form.get('roiId')
+    frame_shape = json.loads(request.form.get('frame_shape'))
+    points = json.loads(request.form.get('points'))
+   
+    roi_data = []
+    for i,plane in enumerate(points):
+        if plane is None or not len(plane):
+            continue
+        array_dat = np.array(plane)
+        z_dims = i*np.ones((array_dat.shape[:2]+(1,)))
+        plane_data = np.concatenate((array_dat,z_dims),axis=2)
+        roi_data.extend(list(plane_data))
+    try:
+        roi = ROI(polygons=roi_data,im_shape=frame_shape[:3])
+    except:
+        return jsonify(result='failed to create ROI')
+
+    smoother = SmoothROIBoundaries()
+    roi = smoother.apply([roi])[0]
+
+    convertedRoi = []
+    try:
+        for i in xrange(roi.im_shape[0]):
+            convertedRoi.append([])
+    except:
+        for i in xrange(np.max(np.array(roi.coords)[:,:,2])):
+            convertedRoi.append([])
+    for poly in roi.polygons:
+        coords = np.array(poly.exterior.coords)
+        plane = int(coords[0,-1])
+        coords = coords[:,:2].astype(int).tolist()
+        convertedRoi[plane].append(coords)
+
+    return jsonify({roi_id: {'points': convertedRoi}})
 
 
 @app.route('/getFolders/<directory>')

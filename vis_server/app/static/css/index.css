@@ -26,6 +26,9 @@ body {
 }
 #roi_canvas {
 }   
+#positioning_canvas {
+    display: none;
+}
 .floatLeft {
     float: Left;
 }
@@ -82,8 +85,14 @@ body {
     background-color: #555;
     cursor: pointer;
 }
-.button.selected {
+.button.disabled {
+    color: #500;
+    background-color: #222;
+}
+.selected {
     background-color: #555;
+}
+.button.selected {
     cursor: default;
 }
 .button.smallButton {
@@ -175,6 +184,7 @@ input.norming_value_input{
     color: #000;
 }
 #volume_button.loaded.selected {
+    background-color: #0F0;
     color: #555;
 }
 #volume_button.loaded:hover {
@@ -199,6 +209,7 @@ input.norming_value_input{
 .roiTab {
     border: thin solid #0F0;
     height: 50px;
+    overflow: hidden;
 }
 
 .roiTabLabel {
@@ -220,6 +231,10 @@ input.norming_value_input{
 .roiTab .button.loaded.viewing {
     color: #000;
     background-color: #0F0;
+}
+
+.roiTab.selected {
+    background-color: #500;
 }
 
 #roi_control_heading .button {
@@ -301,4 +316,37 @@ input.norming_value_input{
 
 #label_select {
     width: 125px;
+}
+
+#drawing_controls {
+    width: 250px;
+    height: 200px;
+    right: 0px;
+    bottom: 0px;
+    position: absolute;
+    border: 1px solid #fff;
+    z-index: 10;
+    background-color: #000;
+
+}
+
+.editablePoint {
+    width: 0px;
+    height: 0px;
+    cursor: move;
+    z-index: 100;
+    position: relative; 
+    float: left;
+    overflow: visible;
+}
+
+.editableImageContainer {
+    width: 10px;
+    height: 10px;
+    background-image: url(../images/red-circle.png);
+    background-size: 10px 10px;
+    background-repeat: no-repeat;
+    position: relative;
+    left: -5px;
+    top: -5px;
 }
